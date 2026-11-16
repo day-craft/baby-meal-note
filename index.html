@@ -180,6 +180,7 @@ details[open] .chev{transform:rotate(180deg)}
 .row{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);
   border-radius:18px;padding:13px 14px;box-shadow:var(--shadow);margin-bottom:9px;cursor:pointer}
 .row-active{border-color:#F7D9C8;background:linear-gradient(160deg,#FFFEFC,#FFF5ED)}
+.row-skip{background:#FDF8F2;border-color:#F2E7DB}
 .row-main{flex:1;min-width:0}
 .row-title{font-size:14px;font-weight:800;letter-spacing:-.01em;color:#3D372F;word-break:keep-all}
 .row-sub{margin-top:3px;font-size:11.5px;color:#9A8B7C;font-weight:600}
@@ -812,6 +813,21 @@ function listHTML(){
           (e.note?'<div class="row-sub muted">'+esc(e.note)+'</div>':'')+
         '</div>'+
         '<div class="row-side">'+badge+'<button class="mini" data-act="entry-edit" data-id="'+e.id+'">수정</button></div>'+
+      '</div>';
+    }).join('');
+  }
+  var skipDays=Object.keys(state.logs).filter(function(k){
+    var v=state.logs[k]; return !!(v&&v.amount==='skip');
+  }).sort().reverse();
+  if(skipDays.length){
+    html+='<div class="sec-head"><span class="sec-title">쉬어간 날</span><span class="sec-sub">'+skipDays.length+'일</span></div>';
+    html+=skipDays.map(function(d){
+      var lg=state.logs[d]||{};
+      return '<div class="row row-skip" data-act="sel-date" data-date="'+d+'">'+
+        '<div class="row-main">'+
+          '<div class="row-title">'+mdLong(d)+' '+dowOf(d)+' <span class="badge badge-skip">쉬어감</span></div>'+
+          '<div class="row-sub muted">'+(lg.reaction?esc(lg.reaction):'이날은 이유식을 쉬었어요')+(lg.shifted?' · 이후 일정 하루 미룸':'')+'</div>'+
+        '</div>'+
       '</div>';
     }).join('');
   }
