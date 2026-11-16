@@ -98,6 +98,7 @@ button{font-family:inherit}
 .badge-muted{background:#F7EEE5;color:#958678}
 .badge-skip{background:#F7EEE5;color:#938577;box-shadow:inset 0 0 0 1px #EFE3D7}
 .badge-warn{background:var(--warn-soft);color:var(--warn)}
+.badge-soon{background:#FDEDD6;color:#B37618}
 
 /* ── buttons ── */
 .btn{font-size:13.5px;font-weight:800;border-radius:14px;padding:12px 16px;border:1px solid transparent;cursor:pointer;
@@ -385,7 +386,8 @@ function parseISO(s){
 function isDate(s){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(s||''))) return false;
   var d=parseISO(s);
-  return !isNaN(d.getTime());
+  if(isNaN(d.getTime())) return false;
+  return iso(d)===String(s);
 }
 function addDays(s,n){ var d=parseISO(s); d.setDate(d.getDate()+n); return iso(d); }
 function diffDays(a,b){ return Math.round((parseISO(b)-parseISO(a))/86400000); }
@@ -434,14 +436,14 @@ function seedState(){
     ],
     logs:{},
     stock:[
-      {id:'s1', name:'산골 알밤미음', brand:'산골이유식', size:100, qty:1, status:'arrived', arrived:'2026-11-11', expected:'', opened:'', shelfLife:3, note:'100g 팩 → 50g씩 이틀'},
-      {id:'s2', name:'루솔 닭고기미음', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-17', opened:'', shelfLife:3, note:'140g 팩 3일 소분'},
-      {id:'s3', name:'루솔 한우미음', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-17', opened:'', shelfLife:3, note:'140g 팩 3일 소분'},
-      {id:'s4', name:'루솔 한우미음 (특가분)', brand:'루솔', size:140, qty:3, status:'expected', arrived:'', expected:'2026-11-21', opened:'', shelfLife:3, note:'화요특가 3팩 재주문 · 한우 1팩씩 채소 1팩과 1:1 믹스'},
-      {id:'s5', name:'루솔 감자', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-21', opened:'', shelfLife:3, note:'한우 1팩과 1:1 믹스'},
-      {id:'s6', name:'루솔 고구마', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-21', opened:'', shelfLife:3, note:'한우 1팩과 1:1 믹스'},
-      {id:'s7', name:'루솔 단호박', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-21', opened:'', shelfLife:3, note:'한우 1팩과 1:1 믹스'},
-      {id:'s8', name:'루솔 브로콜리', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-21', opened:'', shelfLife:3, note:'한우 1팩과 1:1 믹스'}
+      {id:'s1', name:'산골 알밤미음', brand:'산골이유식', size:100, qty:1, status:'arrived', arrived:'2026-11-11', expected:'', opened:'', shelfLife:3, expiryDate:'', note:'100g 팩 → 50g씩 이틀'},
+      {id:'s2', name:'루솔 닭고기미음', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-17', opened:'', shelfLife:3, expiryDate:'', note:'140g 팩 3일 소분'},
+      {id:'s3', name:'루솔 한우미음', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-17', opened:'', shelfLife:3, expiryDate:'', note:'140g 팩 3일 소분'},
+      {id:'s4', name:'루솔 한우미음 (특가분)', brand:'루솔', size:140, qty:3, status:'expected', arrived:'', expected:'2026-11-21', opened:'', shelfLife:3, expiryDate:'', note:'화요특가 3팩 재주문 · 한우 1팩씩 채소 1팩과 1:1 믹스'},
+      {id:'s5', name:'루솔 감자', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-21', opened:'', shelfLife:3, expiryDate:'', note:'한우 1팩과 1:1 믹스'},
+      {id:'s6', name:'루솔 고구마', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-21', opened:'', shelfLife:3, expiryDate:'', note:'한우 1팩과 1:1 믹스'},
+      {id:'s7', name:'루솔 단호박', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-21', opened:'', shelfLife:3, expiryDate:'', note:'한우 1팩과 1:1 믹스'},
+      {id:'s8', name:'루솔 브로콜리', brand:'루솔', size:140, qty:1, status:'expected', arrived:'', expected:'2026-11-21', opened:'', shelfLife:3, expiryDate:'', note:'한우 1팩과 1:1 믹스'}
     ],
     ingredients:[
       {id:'i1', name:'쌀', emoji:'🍚', status:'done', first:'2026-11-09', memo:'쌀미음 3일 완료'},
@@ -537,6 +539,7 @@ function normalize(s){
         expected:isDate(it.expected)?it.expected:'',
         opened:isDate(it.opened)?it.opened:'',
         shelfLife:Math.max(1,Math.min(14,Math.round(num(it.shelfLife,3)))),
+        expiryDate:isDate(it.expiryDate)?it.expiryDate:'',
         note:it.note?String(it.note):''
       });
     });
@@ -845,6 +848,13 @@ function itemHTML(s){
     sub='도착 '+mdShort(s.arrived||t)+' · 냉장 '+(s.shelfLife||3)+'일';
     if(s.opened) sub+=' · 개봉 '+mdShort(s.opened);
   }
+  if(s.expiryDate) sub+=' · 유통기한 '+mdShort(s.expiryDate);
+  var expChip='';
+  if(s.expiryDate&&s.qty>0&&s.status==='arrived'&&!s.opened){
+    var leftE=diffDays(t,s.expiryDate);
+    if(leftE<0) expChip='<div style="margin-top:6px"><span class="badge badge-warn">유통기한 지남</span></div>';
+    else if(leftE<=3) expChip='<div style="margin-top:6px"><span class="badge badge-soon">유통기한 D-'+leftE+'</span></div>';
+  }
   var tools='';
   if(s.status==='expected'){
     tools+='<button class="mini mini-primary" data-act="stock-arrive" data-id="'+s.id+'">도착 처리</button>';
@@ -860,6 +870,7 @@ function itemHTML(s){
       '<div style="flex:1;min-width:0">'+
         '<div class="item-name">'+esc(s.name)+'<span class="tag">'+s.size+'g</span></div>'+
         '<div class="item-sub">'+(s.brand?esc(s.brand)+' · ':'')+sub+'</div>'+
+        expChip+
         (s.note?'<div class="item-note">'+esc(s.note)+'</div>':'')+
       '</div>'+
       '<div class="stepper">'+
@@ -1247,6 +1258,7 @@ function openStockSheet(id){
       '<label class="field">도착일<input id="fArrived" type="date" value="'+esc(s&&s.arrived?s.arrived:todayISO())+'"></label>'+
       '<label class="field">도착 예정일<input id="fExpected" type="date" value="'+esc(s&&s.expected?s.expected:'')+'"></label>'+
     '</div>'+
+    '<label class="field">유통기한 (선택)<input id="fExpiry" type="date" value="'+esc(s&&s.expiryDate?s.expiryDate:'')+'"></label>'+
     '<label class="field">메모<input id="fNote" type="text" value="'+esc(s?s.note:'')+'" placeholder="예: 140g 팩 3일 소분"></label>'+
     '<div class="sheet-actions">'+
       '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
@@ -1268,6 +1280,7 @@ function openStockSheet(id){
         arrived:root.querySelector('#fArrived').value||'',
         expected:root.querySelector('#fExpected').value||'',
         shelfLife:Math.max(1,Math.min(14,Math.round(num(root.querySelector('#fLife').value,3)))),
+        expiryDate:isDate(root.querySelector('#fExpiry').value)?root.querySelector('#fExpiry').value:'',
         opened:s?s.opened:'',
         note:(root.querySelector('#fNote').value||'').trim()
       };
