@@ -255,15 +255,34 @@ details[open] .chev{transform:rotate(180deg)}
 
 /* ── tab bar ── */
 .tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom));
-  width:min(520px,calc(100% - 24px));display:flex;gap:4px;padding:6px;z-index:40;
+  width:min(520px,calc(100% - 24px));display:flex;gap:3px;padding:6px;z-index:40;
   background:rgba(255,253,249,.94);border:1px solid var(--line);border-radius:999px;
   box-shadow:0 10px 30px rgba(150,104,78,.18);
   -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
-.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:transparent;
-  padding:8px 4px;border-radius:999px;color:#A5978A;font-size:11px;font-weight:800;cursor:pointer;
-  -webkit-appearance:none;letter-spacing:-.01em}
-.tabbar button .ic{font-size:17px;line-height:1.2}
+.tabbar button{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:transparent;
+  padding:8px 2px;border-radius:999px;color:#A5978A;font-size:11px;font-weight:800;cursor:pointer;
+  -webkit-appearance:none;letter-spacing:-.02em;white-space:nowrap;overflow:hidden}
+.tabbar button .ic{font-size:16px;line-height:1.2}
 .tabbar button.on{background:var(--coral-soft);color:var(--coral-d)}
+@media(max-width:430px){
+  .tabbar{gap:2px;padding:5px}
+  .tabbar button{padding:8px 1px;font-size:10.5px}
+  .tabbar button .ic{font-size:15px}
+}
+
+/* ── brands ── */
+.bcard{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:13px 14px;box-shadow:var(--shadow);margin-bottom:9px}
+.bcard-top{display:flex;align-items:flex-start;gap:10px}
+.bcard-main{flex:1;min-width:0}
+.bcard-name{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:14.5px;font-weight:800;
+  letter-spacing:-.01em;line-height:1.35;word-break:keep-all;color:#3D372F}
+.bstatus{font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:999px;white-space:nowrap;letter-spacing:-.01em}
+.bstatus.on{background:#FCE0D3;color:#B8523A}
+.bstatus.done{background:#F7EEE5;color:#958678}
+.bstatus.cand{background:#FDF0E4;color:#B9764A;box-shadow:inset 0 0 0 1px #F6E2CE}
+.bcard-pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.bpill{font-size:11px;font-weight:700;color:#9E6448;background:#FDF0E4;border-radius:999px;padding:3px 9px;letter-spacing:-.01em}
+.bcard-note{margin-top:8px;font-size:11.5px;color:#9A8B7C;line-height:1.5;word-break:keep-all;white-space:pre-wrap}
 
 /* ── sheet ── */
 #sheet{position:fixed;inset:0;z-index:80;display:none}
@@ -354,6 +373,10 @@ details[open] .chev{transform:rotate(180deg)}
     <section id="view-ing" class="view hidden">
       <div id="ingMount"></div>
     </section>
+
+    <section id="view-brands" class="view hidden">
+      <div id="brandsMount"></div>
+    </section>
   </main>
 </div>
 
@@ -361,6 +384,7 @@ details[open] .chev{transform:rotate(180deg)}
   <button data-act="tab" data-view="plan"><span class="ic">🍽</span><span>오늘·식단표</span></button>
   <button data-act="tab" data-view="stock"><span class="ic">🧊</span><span>냉장·재고</span></button>
   <button data-act="tab" data-view="ing"><span class="ic">🌱</span><span>재료 도감</span></button>
+  <button data-act="tab" data-view="brands"><span class="ic">🏷️</span><span>브랜드</span></button>
 </nav>
 
 <div id="sheet"></div>
@@ -374,6 +398,9 @@ var AMOUNTS=[{v:'full',l:'완식',e:'😋'},{v:'half',l:'절반',e:'🙂'},{v:'l
 var AMT_LABEL={full:'완식',half:'절반',little:'조금',refuse:'거부',skip:'쉬어감'};
 var ING_ST=[{v:'done',l:'통과'},{v:'testing',l:'관찰중'},{v:'caution',l:'주의'},{v:'todo',l:'미시도'}];
 var ING_LABEL={done:'통과',testing:'관찰중',caution:'주의',todo:'미시도'};
+var BRAND_ST=[{v:'active',l:'이용 중'},{v:'done',l:'이용 완료'},{v:'candidate',l:'후보'}];
+var BRAND_LABEL={active:'이용 중',done:'이용 완료',candidate:'후보'};
+var BRAND_CLS={active:'on',done:'done',candidate:'cand'};
 var STORAGE_OK=true;
 
 /* ───────── 날짜 도우미 ───────── */
@@ -458,6 +485,12 @@ function seedState(){
       {id:'i8', name:'단호박', emoji:'🎃', status:'todo', first:'2026-11-28', memo:''},
       {id:'i9', name:'브로콜리', emoji:'🥦', status:'todo', first:'2026-12-01', memo:''}
     ],
+    brands:[
+      {id:'b1', name:'베베쿡', status:'done', size:'미음 단계', shelf:'냉장 6일', memo:'초기 쌀미음·애호박미음 진행 완료'},
+      {id:'b2', name:'산골이유식', status:'active', size:'1팩 100g', shelf:'냉장 팩 표시 확인', memo:'50g씩 2일 소분 (한우·알밤미음)'},
+      {id:'b3', name:'루솔', status:'active', size:'1팩 140g (초기1)', shelf:'냉장 21일', memo:'단독 46~47g×3일 / 한우+채소 1:1 믹스 60~70g×3일. 화요특가 활용, 1.5단계 묽은죽 용량(140g/160g)은 팩 도착 후 확인'},
+      {id:'b4', name:'엘빈즈', status:'candidate', size:'1팩 160g', shelf:'냉장 30일', memo:'12월 초 초기 2단계 진입 시 주문 검토'}
+    ],
     ui:{view:'plan', mode:'cal', sel:null, calMonth:null, ruleOpen:false},
     savedAt:null
   };
@@ -478,11 +511,12 @@ function normalize(s){
     },
     principles:{summary:base.principles.summary, items:base.principles.items.slice()},
     entries:[], logs:{}, stock:[], ingredients:[],
+    brands:[],
     ui:{view:'plan',mode:'cal',sel:null,calMonth:null,ruleOpen:false},
     savedAt:s.savedAt||null
   };
   var u=s.ui||{};
-  if(u.view==='plan'||u.view==='stock'||u.view==='ing') out.ui.view=u.view;
+  if(u.view==='plan'||u.view==='stock'||u.view==='ing'||u.view==='brands') out.ui.view=u.view;
   if(u.mode==='cal'||u.mode==='list') out.ui.mode=u.mode;
   if(isDate(u.sel)) out.ui.sel=u.sel;
   if(/^\d{4}-\d{2}$/.test(String(u.calMonth||''))) out.ui.calMonth=u.calMonth;
@@ -560,6 +594,21 @@ function normalize(s){
       });
     });
   }
+  if(Array.isArray(s.brands)){
+    s.brands.forEach(function(b){
+      if(!b||!b.name) return;
+      out.brands.push({
+        id:b.id?String(b.id):uid('b'),
+        name:String(b.name).trim().slice(0,40),
+        status:BRAND_LABEL[b.status]?b.status:'candidate',
+        size:b.size?String(b.size).trim().slice(0,40):'',
+        shelf:b.shelf?String(b.shelf).trim().slice(0,40):'',
+        memo:b.memo?String(b.memo).slice(0,400):''
+      });
+    });
+  } else {
+    out.brands=base.brands.map(function(b){ return {id:b.id,name:b.name,status:b.status,size:b.size,shelf:b.shelf,memo:b.memo}; });
+  }
   return out;
 }
 
@@ -617,6 +666,7 @@ function render(){
   renderPlan();
   renderStock();
   renderIng();
+  renderBrands();
 }
 
 /* 생후 개월수: 태어난 날부터 오늘까지 만 n개월 n일 */
@@ -666,7 +716,7 @@ function renderTabs(){
   Array.prototype.forEach.call(document.querySelectorAll('#tabbar button'), function(b){
     b.classList.toggle('on', b.getAttribute('data-view')===v);
   });
-  ['plan','stock','ing'].forEach(function(k){
+  ['plan','stock','ing','brands'].forEach(function(k){
     var el=document.getElementById('view-'+k);
     if(el) el.classList.toggle('hidden', k!==v);
   });
@@ -992,6 +1042,40 @@ function renderIng(){
     '<div class="sec-head"><span class="sec-title">재료 적응 도감</span><span class="sec-sub">총 '+state.ingredients.length+'개</span></div>'+
     stats+list+
     '<button class="btn btn-ghost btn-block" style="margin-top:6px" data-act="ing-new">＋ 새 재료 추가</button>';
+}
+
+/* ───────── 브랜드별 정보 ───────── */
+function renderBrands(){
+  var counts={active:0,done:0,candidate:0};
+  state.brands.forEach(function(b){ counts[b.status]=(counts[b.status]||0)+1; });
+  var html='<div class="sec-head"><span class="sec-title">브랜드별 정보</span><span class="sec-sub">'+state.brands.length+'개 · 이용 중 '+counts.active+'</span></div>';
+  html+='<div class="stats">'+
+    '<div class="stat done"><b>'+counts.active+'</b><span>이용 중</span></div>'+
+    '<div class="stat todo"><b>'+counts.done+'</b><span>이용 완료</span></div>'+
+    '<div class="stat testing"><b>'+counts.candidate+'</b><span>후보</span></div>'+
+    '<div class="stat"><b>'+state.brands.length+'</b><span>전체</span></div>'+
+  '</div>';
+  if(!state.brands.length){
+    html+='<div class="card" style="color:#8B8574;font-size:12.5px;line-height:1.6">등록한 브랜드가 없어요.<br>자주 쓰는 이유식 브랜드를 등록하고 <b>용량·냉장 기한·주문 팁</b>을 한눈에 보세요.</div>';
+  } else {
+    html+=state.brands.map(function(b){
+      return '<div class="bcard">'+
+        '<div class="bcard-top">'+
+          '<div class="bcard-main">'+
+            '<div class="bcard-name">'+esc(b.name)+'<span class="bstatus '+(BRAND_CLS[b.status]||'cand')+'">'+esc(BRAND_LABEL[b.status]||'후보')+'</span></div>'+
+            (b.size||b.shelf?'<div class="bcard-pills">'+
+              (b.size?'<span class="bpill">'+esc(b.size)+'</span>':'')+
+              (b.shelf?'<span class="bpill">'+esc(b.shelf)+'</span>':'')+
+            '</div>':'')+
+            (b.memo?'<div class="bcard-note">'+esc(b.memo)+'</div>':'')+
+          '</div>'+
+          '<button class="mini" data-act="brand-edit" data-id="'+b.id+'">수정</button>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }
+  html+='<button class="btn btn-ghost btn-block" style="margin-top:6px" data-act="brand-new">＋ 브랜드 추가</button>';
+  $('#brandsMount').innerHTML=html;
 }
 
 /* ───────── 시트(모달) ───────── */
@@ -1396,6 +1480,55 @@ function openIngSheet(id){
   }});
 }
 
+function openBrandSheet(id){
+  var b=null;
+  if(id){ state.brands.forEach(function(x){ if(x.id===id) b=x; }); if(!b) return; }
+  var body='<form id="brandForm" novalidate>'+
+    '<label class="field">브랜드명<input id="fBName" type="text" maxlength="40" value="'+esc(b?b.name:'')+'" placeholder="예: 루솔"></label>'+
+    '<label class="field">상태<select id="fBStatus">'+BRAND_ST.map(function(s){
+      return '<option value="'+s.v+'"'+((b?b.status:'active')===s.v?' selected':'')+'>'+s.l+'</option>';
+    }).join('')+'</select></label>'+
+    '<div class="field-row">'+
+      '<label class="field">1팩 용량<input id="fBSize" type="text" maxlength="40" value="'+esc(b?b.size:'')+'" placeholder="예: 1팩 140g"></label>'+
+      '<label class="field">냉장 보관<input id="fBShelf" type="text" maxlength="40" value="'+esc(b?b.shelf:'')+'" placeholder="예: 냉장 21일"></label>'+
+    '</div>'+
+    '<label class="field">메모 · 주문 팁<textarea id="fBMemo" rows="4" maxlength="400" placeholder="예: 단독 46~47g×3일 / 한우+채소 1:1 믹스 60~70g×3일">'+esc(b?b.memo:'')+'</textarea></label>'+
+    '<div class="sheet-actions">'+
+      '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
+      '<button type="submit" class="btn btn-primary">'+(b?'수정 저장':'추가하기')+'</button>'+
+    '</div>'+
+    (b?'<button type="button" class="btn btn-danger btn-block" style="margin-top:8px" data-act="brand-del" data-id="'+b.id+'">이 브랜드 삭제</button>':'')+
+  '</form>';
+  openSheet({title:b?'브랜드 정보 수정':'새 브랜드', body:body, onMount:function(root){
+    root.querySelector('#brandForm').addEventListener('submit', function(ev){
+      ev.preventDefault();
+      var name=(root.querySelector('#fBName').value||'').trim();
+      if(!name){ toast('브랜드명을 적어 주세요'); return; }
+      var stv=root.querySelector('#fBStatus').value;
+      var rec={
+        id:b?b.id:uid('b'), name:name.slice(0,40),
+        status:BRAND_LABEL[stv]?stv:'candidate',
+        size:(root.querySelector('#fBSize').value||'').trim().slice(0,40),
+        shelf:(root.querySelector('#fBShelf').value||'').trim().slice(0,40),
+        memo:(root.querySelector('#fBMemo').value||'').trim().slice(0,400)
+      };
+      if(b){ state.brands=state.brands.map(function(x){ return x.id===b.id?rec:x; }); }
+      else { state.brands.push(rec); }
+      save(); closeSheet(); render(); toast(b?'브랜드 정보를 고쳤어요':'브랜드를 추가했어요');
+    });
+  }});
+}
+
+function deleteBrand(id){
+  var b=null, name='';
+  state.brands.forEach(function(x){ if(x.id===id){ b=x; name=x.name; } });
+  if(!b) return;
+  confirmDo('브랜드 삭제','"'+name+'"을(를) 브랜드 목록에서 지울까요?','삭제',function(){
+    state.brands=state.brands.filter(function(x){ return x.id!==id; });
+    save(); render(); toast('브랜드를 지웠어요');
+  });
+}
+
 function openSettings(){
   var savedTxt='아직 없음';
   if(state.savedAt){
@@ -1412,7 +1545,7 @@ function openSettings(){
       '<p class="sheet-note" id="profilePreview" style="margin:-4px 0 12px"></p>'+
       '<button type="submit" class="btn btn-primary btn-block">이 정보로 저장</button>'+
     '</form>'+
-    '<p class="sheet-note" style="margin:16px 0 0">식단 '+state.entries.length+'개 · 재고 '+state.stock.length+'개 · 재료 '+state.ingredients.length+'개'+
+    '<p class="sheet-note" style="margin:16px 0 0">식단 '+state.entries.length+'개 · 재고 '+state.stock.length+'개 · 재료 '+state.ingredients.length+'개 · 브랜드 '+state.brands.length+'개'+
     '<br>마지막 저장 '+savedTxt+(STORAGE_OK?'':' · 이 화면은 자동 저장이 제한될 수 있어요')+'</p>'+
     '<div class="sheet-actions" style="margin-top:0">'+
       '<button type="button" class="btn btn-primary" data-act="export">백업 파일</button>'+
@@ -1703,6 +1836,9 @@ document.addEventListener('click', function(ev){
     case 'ing-edit': openIngSheet(id); break;
     case 'ing-status': setIngStatus(id, el.getAttribute('data-v')); break;
     case 'ing-del': deleteIng(id); break;
+    case 'brand-new': openBrandSheet(null); break;
+    case 'brand-edit': openBrandSheet(id); break;
+    case 'brand-del': deleteBrand(id); break;
     case 'settings': openSettings(); break;
     case 'close-sheet': closeSheet(); break;
     case 'export': exportFile(); break;
