@@ -1147,6 +1147,8 @@ function openEntrySheet(id, presetDate){
     '</div>'+
     '<label class="field">캘린더 표시 (짧게)<input id="fShort" type="text" maxlength="6" value="'+esc(e?e.short:'')+'" placeholder="예: 한우감자"></label>'+
     '<label class="field">메모<textarea id="fNote" rows="2" placeholder="소분 방법, 관찰 포인트">'+esc(e?e.note:'')+'</textarea></label>'+
+    (e?'<label class="check hidden" id="followWrap" style="margin:0 0 4px"><input type="checkbox" id="fFollow"> <span id="followLabel">이후 일정도 같이 조정</span></label>'+
+      '<p class="sheet-note hidden" id="followNote" style="margin:0 0 10px"></p>':'')+
     '<div class="sheet-actions">'+
       '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
       '<button type="submit" class="btn btn-primary">'+(e?'수정 저장':'추가하기')+'</button>'+
@@ -1154,6 +1156,38 @@ function openEntrySheet(id, presetDate){
     (e?'<button type="button" class="btn btn-danger btn-block" style="margin-top:8px" data-act="entry-del" data-id="'+e.id+'">이 일정 삭제</button>':'')+
   '</form>';
   openSheet({title:e?'식단 일정 수정':'새 식단 일정', body:body, onMount:function(root){
+    var fWrap=root.querySelector('#followWrap');
+    var fBox=root.querySelector('#fFollow');
+    var fLabel=root.querySelector('#followLabel');
+    var fNote=root.querySelector('#followNote');
+    var fTouched=false;
+    function laterList(){
+      if(!e) return [];
+      return state.entries.filter(function(x){ return x.id!==e.id&&x.start>e.end; });
+    }
+    function syncFollow(){
+      if(!e||!fWrap||!fBox) return;
+      var enEl=root.querySelector('#fEnd');
+      var endV=enEl?enEl.value:'';
+      var delta=isDate(endV)?diffDays(e.end,endV):0;
+      var later=laterList();
+      if(!later.length||delta===0){ fWrap.classList.add('hidden'); if(fNote) fNote.classList.add('hidden'); return; }
+      fWrap.classList.remove('hidden');
+      if(fNote) fNote.classList.remove('hidden');
+      fBox.disabled=false;
+      if(!fTouched) fBox.checked=(delta<0);
+      var isPull=(delta<0);
+      if(fLabel) fLabel.textContent='이후 일정 '+later.length+'개를 '+Math.abs(delta)+'일 '+(isPull?'앞으로 당기기':'뒤로 밀기');
+      if(fNote) fNote.textContent=isPull?'빈 날짜가 생기지 않게 뒤 일정이 당겨져요.':'';
+    }
+    if(e&&fBox){
+      fBox.addEventListener('change', function(){ fTouched=true; });
+      ['#fStart','#fEnd'].forEach(function(sel){
+        var el=root.querySelector(sel);
+        if(el){ el.addEventListener('change', syncFollow); el.addEventListener('input', syncFollow); }
+      });
+      syncFollow();
+    }
     root.querySelector('#entryForm').addEventListener('submit', function(ev){
       ev.preventDefault();
       var menu=(root.querySelector('#fMenu').value||'').trim();
@@ -1170,10 +1204,25 @@ function openEntrySheet(id, presetDate){
         note:(root.querySelector('#fNote').value||'').trim(),
         packId:e?e.packId:null
       };
+      var delta=0, follow=false, oldEnd=e?e.end:'';
+      if(e){
+        delta=diffDays(e.end,en);
+        follow=!!(delta!==0&&fBox&&!fBox.disabled&&fBox.checked&&laterList().length);
+      }
       if(e){ state.entries=state.entries.map(function(x){ return x.id===e.id?rec:x; }); }
       else { state.entries.push(rec); }
+      var moved=0;
+      if(follow){
+        state.entries.forEach(function(x){
+          if(x.id===rec.id) return;
+          if(x.start>oldEnd){ x.start=addDays(x.start,delta); x.end=addDays(x.end,delta); moved++; }
+        });
+      }
       state.entries.sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
-      save(); closeSheet(); render(); toast(e?'일정을 고쳤어요':'일정을 추가했어요');
+      save(); closeSheet(); render();
+      if(!e) toast('일정을 추가했어요');
+      else if(moved) toast('일정을 고치고 뒤 일정 '+moved+'개를 '+Math.abs(delta)+'일 '+(delta<0?'당겼어요':'밀었어요'));
+      else toast('일정을 고쳤어요');
     });
   }});
 }
@@ -1454,10 +1503,34 @@ function deleteStock(id){
 function deleteEntry(id){
   var e=findEntry(id);
   if(!e) return;
-  confirmDo('일정 삭제','"'+e.menu+'" '+mdShort(e.start)+'~'+mdShort(e.end)+' 일정을 지울까요? 먹인 기록은 그대로 남아요.','삭제',function(){
-    state.entries=state.entries.filter(function(x){ return x.id!==id; });
-    save(); render(); toast('일정을 지웠어요');
-  });
+  var days=diffDays(e.start,e.end)+1;
+  var later=state.entries.filter(function(x){ return x.id!==e.id&&x.start>e.end; });
+  var body='<form id="delForm" novalidate>'+
+    '<p class="sheet-note">"'+esc(e.menu)+'" '+mdShort(e.start)+'~'+mdShort(e.end)+' 일정을 지울까요? 이 날들 먹인 기록은 그대로 남아요.</p>'+
+    (later.length?'<label class="check" style="margin:0 0 4px"><input type="checkbox" id="fPull" checked> 이후 일정 '+days+'일 앞으로 당기기</label>'+
+      '<p class="sheet-note" style="margin:0 0 8px">뒤에 있는 '+later.length+'개 일정이 '+days+'일씩 당겨져 빈 날이 생기지 않아요.</p>':'')+
+    '<div class="sheet-actions">'+
+      '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
+      '<button type="submit" class="btn btn-danger">일정 삭제</button>'+
+    '</div>'+
+  '</form>';
+  openSheet({title:'일정 삭제', body:body, onMount:function(root){
+    root.querySelector('#delForm').addEventListener('submit', function(ev){
+      ev.preventDefault();
+      var pull=root.querySelector('#fPull');
+      var doPull=!!(pull&&pull.checked);
+      state.entries=state.entries.filter(function(x){ return x.id!==e.id; });
+      var moved=0;
+      if(doPull){
+        state.entries.forEach(function(x){
+          if(x.start>e.end){ x.start=addDays(x.start,-days); x.end=addDays(x.end,-days); moved++; }
+        });
+      }
+      state.entries.sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
+      save(); closeSheet(); render();
+      toast(moved?'일정을 지우고 뒤 일정 '+moved+'개를 '+days+'일 당겼어요':'일정을 지웠어요');
+    });
+  }});
 }
 
 function deleteLog(date){
