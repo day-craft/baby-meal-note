@@ -360,6 +360,22 @@ details[open] .chev{transform:rotate(180deg)}
 .check{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#8A7C6E;margin:-2px 0 14px}
 .check input{width:18px;height:18px;margin:0}
 
+/* ── 날짜별 목표 용량 (dailyGrams) ── */
+.dg-box{border:1px solid #F2E3D5;background:#FFFCF7;border-radius:15px;padding:11px 12px 8px;margin:0 0 12px;transition:background .15s ease,border-color .15s ease}
+.dg-box.on{background:#FFF9F4;border-color:#F7C7B1}
+.dg-box .check{margin:0}
+.dg-rows{margin:10px 0 6px}
+.dg-row{display:grid;grid-template-columns:82px 1fr 13px;align-items:center;gap:8px;margin-bottom:7px}
+.dg-date{font-size:12px;font-weight:800;color:#8A7C6E;letter-spacing:-.02em;white-space:nowrap}
+.dg-row input{display:block;width:100%;margin:0;font-family:inherit;font-size:15px;font-weight:800;color:var(--ink);
+  background:#FFFDF9;border:1px solid #F2E3D5;border-radius:11px;padding:8px 10px;text-align:right;
+  -webkit-appearance:none;appearance:none;-moz-appearance:textfield}
+.dg-row input::-webkit-outer-spin-button,.dg-row input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.dg-row input:focus{outline:none;border-color:#F7C7B1;box-shadow:0 0 0 3px rgba(242,138,112,.18)}
+.dg-row input.diff{background:#FFF1E6;border-color:#F3CDB7;color:#B8523A}
+.dg-unit{font-size:11.5px;font-weight:800;color:#AB9D8F}
+.dg-foot{font-size:11.5px;color:#AB9D8F;line-height:1.5;margin:0 0 8px;word-break:keep-all}
+
 /* ── 아래로 당겨서 새로고침 ── */
 #pullRefresh{position:fixed;left:50%;top:calc(8px + env(safe-area-inset-top));z-index:130;
   transform:translate(-50%,-72px);opacity:0;pointer-events:none;
@@ -524,6 +540,7 @@ function uid(p){ return (p||'id')+'_'+Date.now().toString(36)+Math.random().toSt
 function num(v,d){ var n=Number(v); return isFinite(n)?n:d; }
 
 var PR_MAX=10;
+var MAX_GRAMS=400;
 
 /* ───────── 기본 데이터 ───────── */
 function seedState(){
@@ -634,7 +651,7 @@ function normalize(s){
         });
       }
       if(!pids.length&&e.packId) pids.push(String(e.packId));   /* 기존 단일 packId 자동 마이그레이션 */
-      out.entries.push({
+      var rec={
         id:e.id?String(e.id):uid('e'), start:a, end:b, menu:String(e.menu),
         brand:e.brand?String(e.brand):'',
         short:e.short?String(e.short):String(e.menu).replace(/\s*(미음|죽)$/,'').slice(-3),
@@ -642,7 +659,12 @@ function normalize(s){
         note:e.note?String(e.note):'',
         mealsPerDay:(Number(e.mealsPerDay)===2?2:1),
         packId:(pids[0]||null), packIds:pids
-      });
+      };
+      /* dailyGrams 는 일정 기간 안의 날짜·숫자만 남기고, 비면 키 자체를 두지 않아요.
+         (기존 저장본에 이 필드가 없으면 그대로 없이 유지 → 예전처럼 grams 사용) */
+      var recDg=dailyGramsFit(e.dailyGrams, rec.start, rec.end);
+      if(recDg) rec.dailyGrams=recDg;
+      out.entries.push(rec);
     });
   } else {
     out.entries=base.entries;
@@ -782,6 +804,80 @@ function findEntry(id){
   for(var i=0;i<state.entries.length;i++){ if(state.entries[i].id===id) return state.entries[i]; }
   return null;
 }
+
+/* ───────── 날짜별 목표 용량 (dailyGrams) ─────────
+   entries[].grams      = 이 일정의 기본 1회 목표량 ('50' 또는 '45~50')
+   entries[].dailyGrams = { 'YYYY-MM-DD': 55 }  날짜별 목표량(g, 숫자)
+   dailyGrams 에 없는 날짜는 기본 grams 를 그대로 씁니다. */
+function dailyGramsFit(dg,start,end){
+  if(!dg||typeof dg!=='object') return null;
+  var hasRange=(isDate(start)&&isDate(end));
+  var out={}, any=false;
+  Object.keys(dg).forEach(function(k){
+    if(!isDate(k)) return;
+    if(hasRange&&(k<start||k>end)) return;
+    var raw=dg[k];
+    if(raw==null||raw==='') return;
+    var n=Math.round(num(raw,NaN));
+    if(!isFinite(n)||n<0||n>MAX_GRAMS) return;
+    out[k]=n; any=true;
+  });
+  return any?sortKeyedMap(out):null;
+}
+/* 날짜 키를 항상 오름차순으로 정리 — 기기 간 서명(JSON) 비교가 흔들리지 않도록 */
+function sortKeyedMap(map){
+  var out={};
+  Object.keys(map||{}).sort().forEach(function(k){ out[k]=map[k]; });
+  return out;
+}
+function entryDailyGrams(e){
+  if(!e) return null;
+  return dailyGramsFit(e.dailyGrams, e.start, e.end);
+}
+/* 그 날짜에 쓸 목표 용량 (문자열). dailyGrams 가 없으면 기본 grams */
+function getEntryTargetGrams(e,date){
+  if(!e) return '';
+  var dg=e.dailyGrams;
+  if(dg&&typeof dg==='object'&&Object.prototype.hasOwnProperty.call(dg,date)){
+    var v=dg[date];
+    if(v!=null&&v!=='') return String(v);
+  }
+  return (e.grams==null?'':String(e.grams));
+}
+/* '45~50' → 45, '50' → 50, '' → null */
+function gramsBaseNum(v){
+  var t=String(v==null?'':v).split('~')[0].trim();
+  if(t==='') return null;
+  var n=Number(t);
+  return isFinite(n)?n:null;
+}
+/* 날짜 키를 delta일 옮긴 새 객체 (편집 시트에서 시작일을 바꿀 때) */
+function remapKeyMap(map,delta){
+  var src=map||{}, out={};
+  Object.keys(src).forEach(function(k){
+    if(!isDate(k)) return;
+    var nk=addDays(k,delta);
+    if(out[nk]==null) out[nk]=src[k];
+  });
+  return out;
+}
+/* 일정이 from 이후로 delta일 움직일 때 날짜별 용량의 날짜 키도 함께 이동.
+   from 이전 날짜의 값은 그 날짜에 그대로 남습니다(부분적으로 늘어난 일정). */
+function shiftDailyGrams(e,from,delta){
+  if(!e||!delta) return;
+  var dg=dailyGramsFit(e.dailyGrams);          /* 범위 검사 전의 원본 키를 먼저 읽고 */
+  if(!dg){ delete e.dailyGrams; return; }
+  var out={};
+  Object.keys(dg).forEach(function(k){ if(k<from) out[k]=dg[k]; });
+  Object.keys(dg).forEach(function(k){
+    if(k>=from){
+      var nk=addDays(k,delta);
+      if(out[nk]==null) out[nk]=dg[k];
+    }
+  });
+  var fit=dailyGramsFit(out,e.start,e.end);    /* 옮긴 뒤의 범위로 정리 */
+  if(fit) e.dailyGrams=fit; else delete e.dailyGrams;
+}
 function findStock(id){
   for(var i=0;i<state.stock.length;i++){ if(state.stock[i].id===id) return state.stock[i]; }
   return null;
@@ -845,9 +941,12 @@ function packPillText(e){
 
 function cloneEntry(e){
   var pids=packIdsOf(e);
-  return {id:e.id, start:e.start, end:e.end, menu:e.menu, brand:e.brand||'',
+  var out={id:e.id, start:e.start, end:e.end, menu:e.menu, brand:e.brand||'',
     short:e.short||'', grams:(e.grams==null?'':String(e.grams)), note:e.note||'',
     mealsPerDay:mealsPerDayOf(e), packId:(pids[0]||null), packIds:pids};
+  var dg=entryDailyGrams(e);
+  if(dg) out.dailyGrams=dg;
+  return out;
 }
 /* 저장된 먹인 기록(state.logs)의 날짜 키를 일정과 함께 이동.
    - mapFn이 같은 날짜를 돌려주면 그대로
@@ -1063,7 +1162,7 @@ function renderPlan(){
     var packTxt=packPillText(e);
     body='<div class="hero-kicker">'+esc(e.brand||'이유식')+(total>1?' · '+idx+'/'+total+'일째':'')+'</div>'+
       '<h2 class="hero-menu">'+esc(e.menu)+'</h2>'+
-      '<div class="hero-meta"><span class="meta-pill">'+esc(e.grams)+'g</span>'+
+      '<div class="hero-meta"><span class="meta-pill">'+esc(getEntryTargetGrams(e,sel))+'g</span>'+
         '<span class="meta-pill">'+(mealsPerDayOf(e)===2?'하루 2회 · 오전·오후':'하루 1회')+'</span>'+
         (packTxt?'<span class="meta-pill">🔗 '+esc(packTxt)+'</span>':'')+'</div>'+
       (e.note?'<p class="hero-note">'+esc(e.note)+'</p>':'');
@@ -1176,7 +1275,7 @@ function listHTML(){
       return '<div class="row'+(active?' row-active':'')+'" data-act="sel-date" data-date="'+(active?sel:e.start)+'">'+
         '<div class="row-main">'+
           '<div class="row-title">'+esc(e.menu)+'</div>'+
-          '<div class="row-sub">'+mdShort(e.start)+' ~ '+mdShort(e.end)+' · '+days+'일 · '+esc(e.grams)+'g'+(mealsPerDayOf(e)===2?' · 하루 2회':'')+(packsOf(e).length?' · 🔗 연결 '+packsOf(e).length+'팩':'')+(skips?' · 쉬어감 '+skips+'일':'')+'</div>'+
+          '<div class="row-sub">'+mdShort(e.start)+' ~ '+mdShort(e.end)+' · '+days+'일 · '+esc(e.grams)+'g'+(entryDailyGrams(e)?' · 날짜별 용량':'')+(mealsPerDayOf(e)===2?' · 하루 2회':'')+(packsOf(e).length?' · 🔗 연결 '+packsOf(e).length+'팩':'')+(skips?' · 쉬어감 '+skips+'일':'')+'</div>'+
           (e.note?'<div class="row-sub muted">'+esc(e.note)+'</div>':'')+
         '</div>'+
         '<div class="row-side">'+badge+'<button class="mini" data-act="entry-edit" data-id="'+e.id+'">수정</button></div>'+
@@ -1461,11 +1560,11 @@ function shiftScheduleFrom(date){
   var moved=0;
   state.entries.forEach(function(e){
     if(e.start===date){
-      e.start=addDays(e.start,1); e.end=addDays(e.end,1); moved++;
+      e.start=addDays(e.start,1); e.end=addDays(e.end,1); shiftDailyGrams(e,date,1); moved++;
     } else if(e.start<date&&e.end>=date){
-      e.end=addDays(e.end,1); moved++;
+      e.end=addDays(e.end,1); shiftDailyGrams(e,date,1); moved++;
     } else if(e.start>date){
-      e.start=addDays(e.start,1); e.end=addDays(e.end,1); moved++;
+      e.start=addDays(e.start,1); e.end=addDays(e.end,1); shiftDailyGrams(e,date,1); moved++;
     }
   });
   state.entries.sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
@@ -1478,11 +1577,11 @@ function unshiftScheduleFrom(date){
   var next=addDays(date,1), moved=0;
   state.entries.forEach(function(e){
     if(e.start===next){
-      e.start=addDays(e.start,-1); e.end=addDays(e.end,-1); moved++;
+      e.start=addDays(e.start,-1); e.end=addDays(e.end,-1); shiftDailyGrams(e,next,-1); moved++;
     } else if(e.start<date&&e.end>=next){
-      e.end=addDays(e.end,-1); moved++;
+      e.end=addDays(e.end,-1); shiftDailyGrams(e,next,-1); moved++;
     } else if(e.start>next){
-      e.start=addDays(e.start,-1); e.end=addDays(e.end,-1); moved++;
+      e.start=addDays(e.start,-1); e.end=addDays(e.end,-1); shiftDailyGrams(e,next,-1); moved++;
     }
   });
   state.entries.sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
@@ -1494,7 +1593,7 @@ function openLogSheet(date){
   var e=entryForDate(date);
   var prev=normLog(state.logs[date]);
   var mpd=mealsPerDayOf(e);
-  var planGrams=e?String(e.grams||'').split('~')[0]:'';
+  var planGrams=e?String(getEntryTargetGrams(e,date)||'').split('~')[0]:'';
   var shiftedAlready=!!(prev&&prev.shifted);
   var draft={am:null,pm:null};
   var touched={am:false,pm:false};
@@ -1816,6 +1915,12 @@ function openEntrySheet(id, presetDate){
       '<label class="field">1회 양 (g)<input id="fGrams" type="text" inputmode="numeric" value="'+esc(e?e.grams:'')+'" placeholder="50 또는 60~70"></label>'+
       '<label class="field">브랜드<input id="fBrand" type="text" value="'+esc(e?e.brand:'')+'" placeholder="예: 루솔"></label>'+
     '</div>'+
+    '<div class="dg-box" id="dgBox">'+
+      '<label class="check"><input type="checkbox" id="fDaily"> 날짜별 용량 다르게 설정</label>'+
+      '<p class="dg-foot" id="dgHint"></p>'+
+      '<div class="dg-rows hidden" id="dgRows"></div>'+
+      '<p class="dg-foot hidden" id="dgFoot"></p>'+
+    '</div>'+
     '<div class="field" style="margin-bottom:12px">하루 끼니'+
       '<div class="seg" id="mealSeg" style="margin-top:6px">'+
         '<button type="button" data-mpd="1" data-v="full" class="'+(mealsPerDayOf(e)===1?'on':'')+'">1식</button>'+
@@ -1861,6 +1966,97 @@ function openEntrySheet(id, presetDate){
       var lab=inp.closest?inp.closest('.packchip'):null;
       if(lab) lab.classList.toggle('on', !!inp.checked);
     });
+    /* ── 날짜별 목표 용량(dailyGrams) ── */
+    var dgBox=root.querySelector('#dgBox');
+    var dgRows=root.querySelector('#dgRows');
+    var dgHint=root.querySelector('#dgHint');
+    var dgFoot=root.querySelector('#dgFoot');
+    var fDaily=root.querySelector('#fDaily');
+    var dgEdits={};                       /* { 'YYYY-MM-DD': '55' } 손댄 날짜만 */
+    var initDg=entryDailyGrams(e);
+    if(initDg){ Object.keys(initDg).forEach(function(k){ dgEdits[k]=String(initDg[k]); }); }
+    if(initDg&&fDaily) fDaily.checked=true;
+    var dgStartWatch=start;
+    function dgValidRange(){
+      var sEl=root.querySelector('#fStart'), eEl=root.querySelector('#fEnd');
+      var sv=sEl?sEl.value:'', ev=eEl?eEl.value:'';
+      if(!isDate(sv)||!isDate(ev)||ev<sv) return null;
+      return {s:sv, e:ev};
+    }
+    function dgBase(){
+      var gEl=root.querySelector('#fGrams');
+      return gramsBaseNum(gEl?gEl.value:'');
+    }
+    function dgFootText(count){
+      var base=dgBase();
+      if(!count) return base==null?'아직 바꾼 날이 없어요. 비워 두면 기본 1회 양을 써요.':'아직 바꾼 날이 없어요 — 모든 날 기본 '+base+'g';
+      return '이 중 '+count+'일은 기본과 다른 용량이에요'+(base==null?'':' (기본 '+base+'g)');
+    }
+    function dgRenderRows(){
+      if(!dgRows||!fDaily||!fDaily.checked) return;
+      var rg=dgValidRange();
+      if(!rg){
+        dgRows.innerHTML='<p class="dg-foot" style="margin:2px 0 6px">시작일과 마지막 날을 먼저 정해 주세요.</p>';
+        if(dgFoot) dgFoot.textContent=dgFootText(0);
+        return;
+      }
+      var base=dgBase(), html='', cnt=0, d=rg.s, n=0;
+      while(d<=rg.e&&n<120){
+        var has=Object.prototype.hasOwnProperty.call(dgEdits,d);
+        var raw=has?String(dgEdits[d]):'';
+        var v=raw!==''?raw:(base==null?'':String(base));
+        var isDiff=(raw!==''&&(base==null||Number(raw)!==base));
+        if(isDiff) cnt++;
+        html+='<label class="dg-row">'+
+          '<span class="dg-date">'+mdShort(d)+' ('+dowOf(d)+')</span>'+
+          '<input type="text" inputmode="numeric" autocomplete="off" data-date="'+d+'" value="'+esc(v)+'"'+
+            (base==null?'':' placeholder="'+esc(String(base))+'"')+(isDiff?' class="diff"':'')+'>'+
+          '<span class="dg-unit">g</span></label>';
+        d=addDays(d,1); n++;
+      }
+      dgRows.innerHTML=html;
+      if(dgFoot) dgFoot.textContent=dgFootText(cnt);
+    }
+    function dgSync(){
+      if(!dgBox||!fDaily) return;
+      var on=!!fDaily.checked;
+      dgBox.classList.toggle('on', on);
+      if(dgRows) dgRows.classList.toggle('hidden', !on);
+      if(dgFoot) dgFoot.classList.toggle('hidden', !on);
+      if(dgHint){
+        dgHint.textContent=on
+          ? '바꾸고 싶은 날만 고치면 돼요. 비워 두는 날은 기본 1회 양을 써요.'
+          : '체크하면 날짜마다 다른 목표 용량을 넣을 수 있어요.';
+      }
+      if(on) dgRenderRows();
+    }
+    if(fDaily) fDaily.addEventListener('change', dgSync);
+    if(dgRows) dgRows.addEventListener('input', function(ev){
+      var inp=ev.target;
+      if(!inp||!inp.getAttribute||!inp.getAttribute('data-date')) return;
+      var d=inp.getAttribute('data-date');
+      var v=String(inp.value||'').trim();
+      if(v===''){ delete dgEdits[d]; } else { dgEdits[d]=v; }
+      var base=dgBase();
+      inp.classList.toggle('diff', (v!==''&&(base==null||Number(v)!==base)));
+      if(dgFoot) dgFoot.textContent=dgFootText(dgRows.querySelectorAll('input.diff').length);
+    });
+    var dgGramsField=root.querySelector('#fGrams');
+    if(dgGramsField) dgGramsField.addEventListener('input', function(){ if(fDaily&&fDaily.checked) dgRenderRows(); });
+    ['#fStart','#fEnd'].forEach(function(sel){
+      var el=root.querySelector(sel);
+      if(!el) return;
+      el.addEventListener('input', function(){
+        /* 시작일을 옮기면 날짜별 용량도 같은 날짜에 붙어 따라가게 합니다 */
+        if(sel==='#fStart'&&isDate(el.value)&&isDate(dgStartWatch)&&el.value!==dgStartWatch){
+          var dl=diffDays(dgStartWatch,el.value);
+          if(dl) dgEdits=remapKeyMap(dgEdits,dl);
+          dgStartWatch=el.value;
+        }
+        if(fDaily&&fDaily.checked) dgRenderRows();
+      });
+    });
+    dgSync();
     function laterList(){
       if(!e) return [];
       return state.entries.filter(function(x){ return x.id!==e.id&&x.start>e.end; });
@@ -1912,6 +2108,29 @@ function openEntrySheet(id, presetDate){
           if(inp.checked) pids.push(inp.getAttribute('data-pack'));
         });
       }
+      /* 날짜별 목표 용량: 체크한 경우에만, 기본 1회 양과 다른 날만 저장 */
+      var dgOut=null;
+      if(fDaily&&fDaily.checked){
+        var rg=dgValidRange();
+        if(!rg){ toast('시작일과 마지막 날을 확인해 주세요'); return; }
+        var base=gramsBaseNum((root.querySelector('#fGrams').value||''));
+        var tmp={}, bad='', dd=rg.s;
+        while(dd<=rg.e){
+          var inEl=root.querySelector('#dgRows input[data-date="'+dd+'"]');
+          var raw=inEl?String(inEl.value||'').trim():'';
+          if(raw!==''){
+            var nv=Number(raw);
+            if(!isFinite(nv)||nv<0||nv>MAX_GRAMS){ bad=dd; }
+            else {
+              nv=Math.round(nv);
+              if(!(base!=null&&nv===base)) tmp[dd]=nv;
+            }
+          }
+          dd=addDays(dd,1);
+        }
+        if(bad){ showErr(mdShort(bad)+' 용량은 0~'+MAX_GRAMS+' 사이 숫자로 적어 주세요.'); toast('날짜별 용량을 확인해 주세요'); return; }
+        if(Object.keys(tmp).length) dgOut=tmp;
+      }
       var rec={
         id:e?e.id:uid('e'),
         start:s, end:en, menu:menu,
@@ -1922,6 +2141,7 @@ function openEntrySheet(id, presetDate){
         mealsPerDay:mpd,
         packId:(pids[0]||null), packIds:pids
       };
+      if(dgOut) rec.dailyGrams=dgOut;
       var oldEnd=e?e.end:'';
       var delta=e?diffDays(oldEnd,en):0;
       var follow=e?laterWillFollow(delta):false;
@@ -1932,7 +2152,12 @@ function openEntrySheet(id, presetDate){
       if(follow){
         next.forEach(function(x){
           if(x.id===rec.id) return;
-          if(x.start>oldEnd){ x.start=addDays(x.start,delta); x.end=addDays(x.end,delta); moved++; }
+          if(x.start>oldEnd){
+            var from=x.start;
+            x.start=addDays(x.start,delta); x.end=addDays(x.end,delta);
+            shiftDailyGrams(x,from,delta);
+            moved++;
+          }
         });
       }
       var hits=overlapHits(next, rec.id);
