@@ -47,8 +47,14 @@ button{font-family:inherit}
 /* ── top bar ── */
 .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0 12px;
   padding-top:calc(14px + env(safe-area-inset-top));
-  background:linear-gradient(180deg, rgba(255,251,247,.99) 55%, rgba(255,251,247,.9) 82%, rgba(255,251,247,0));
-  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  /* 스크롤한 내용이 비쳐 보이지 않도록 불투명 배경 (반투명+블러 제거) */
+  background:#FFFBF7;
+  background-image:radial-gradient(520px 190px at 100% -34%, #FFE7D8 0%, rgba(255,231,216,0) 72%),
+                   radial-gradient(420px 170px at -12% -6%, #FFF3E8 0%, rgba(255,243,232,0) 70%);
+  background-repeat:no-repeat;
+  box-shadow:0 0 0 rgba(150,104,78,0);
+  transition:box-shadow .18s ease}
+.topbar.stuck{box-shadow:0 1px 0 #F5E2D4, 0 6px 18px rgba(150,104,78,.07)}
 .brand{display:flex;align-items:center;gap:10px;min-width:0}
 .brand-mark{width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:21px;flex:0 0 auto;
   background:linear-gradient(150deg,#FFE1CE,#FFEFE2);box-shadow:0 2px 10px rgba(222,138,110,.16)}
@@ -160,14 +166,17 @@ details[open] .chev{transform:rotate(180deg)}
 .cal-title{font-size:14.5px;font-weight:800;letter-spacing:-.01em}
 .cal-nav{display:flex;gap:6px;align-items:center}
 .cal-nav .daynav{width:30px;height:30px}
-.cal-dow,.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+/* 7열 고정: 어떤 달·긴 라벨이 와도 칸 너비/높이가 1px도 흔들리지 않게 */
+.cal-dow,.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.cal-grid{grid-auto-rows:58px}
 .cal-dow span{text-align:center;font-size:10.5px;font-weight:700;color:#AEA091;padding:3px 0 6px}
 .cal-dow span:first-child{color:#DE9A80}
-.cal-cell{position:relative;border:0;background:transparent;border-radius:12px;min-height:48px;padding:6px 2px 8px;
-  display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;color:var(--ink);-webkit-appearance:none}
-.cal-d{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
-.cal-l{font-size:9px;font-weight:800;color:#BF5C42;max-width:100%;white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis;line-height:1.15}
+.cal-cell{position:relative;border:0;background:transparent;border-radius:12px;
+  min-width:0;width:100%;height:58px;min-height:0;overflow:hidden;padding:6px 2px 8px;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1px;cursor:pointer;color:var(--ink);-webkit-appearance:none}
+.cal-d{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;flex:0 0 auto}
+.cal-l{display:block;width:100%;max-width:100%;font-size:10px;font-weight:800;color:#BF5C42;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;line-height:1.15;flex:0 0 auto}
 .cal-cell.out{opacity:.3}
 .cal-cell.has{background:#FDF2E9}
 .cal-cell.has.future{background:#FFEBE3}
@@ -317,6 +326,15 @@ details[open] .chev{transform:rotate(180deg)}
 .check{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#8A7C6E;margin:-2px 0 14px}
 .check input{width:18px;height:18px;margin:0}
 
+/* ── 아래로 당겨서 새로고침 ── */
+#pullRefresh{position:fixed;left:50%;top:calc(8px + env(safe-area-inset-top));z-index:130;
+  transform:translate(-50%,-72px);opacity:0;pointer-events:none;
+  background:rgba(62,46,36,.95);color:#FFF8F0;font-size:12px;font-weight:800;letter-spacing:-.01em;
+  padding:8px 14px;border-radius:999px;white-space:nowrap;
+  box-shadow:0 6px 18px rgba(80,52,36,.22);transition:opacity .16s ease}
+#pullRefresh.on{opacity:1}
+#pullRefresh.ready,#pullRefresh.busy{background:#B8523A}
+
 #toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom));transform:translate(-50%,12px);
   z-index:120;background:rgba(62,46,36,.95);color:#FFF8F0;font-size:12.5px;font-weight:700;padding:11px 16px;
   border-radius:14px;opacity:0;pointer-events:none;transition:opacity .2s ease, transform .2s ease;
@@ -329,8 +347,6 @@ details[open] .chev{transform:rotate(180deg)}
   .row-side{flex-direction:row;align-items:center}
   .hero{padding:22px 24px;border-radius:28px}
   .hero-menu{font-size:26px}
-  .cal-cell{min-height:58px}
-  .cal-l{font-size:10px}
   .tabbar{width:420px}
   .sheet-wrap{align-items:center;padding:24px}
   .sheet-panel{border-radius:24px;max-height:86vh;padding-bottom:22px}
@@ -410,6 +426,7 @@ details[open] .chev{transform:rotate(180deg)}
 </nav>
 
 <div id="sheet"></div>
+<div id="pullRefresh" aria-hidden="true">↻ 새로고침</div>
 <div id="toast" role="status"></div>
 <script>
 (function(){
@@ -530,11 +547,12 @@ function normalize(s){
   var out={
     version:1,
     profile:{
-      /* 저장된 값이 있으면 그대로 살리고, 없을 때만 빈 기본값 (코드에 이름·생일 하드코딩 없음) */
+      /* 저장된 값이 있으면 그대로 살리고, 키 자체가 없을 때만 시드 기본값 (이름·생일 하드코딩 없음).
+         빈 문자열("")로 명시된 값은 시드로 되살리지 않습니다. (S4) */
       name:(p.name!=null?String(p.name).trim().slice(0,20):''),
-      stage:p.stage?String(p.stage):base.profile.stage,
+      stage:Object.prototype.hasOwnProperty.call(p,'stage')?String(p.stage==null?'':p.stage):base.profile.stage,
       birth:isDate(p.birth)?String(p.birth):'',
-      startDate:isDate(p.startDate)?String(p.startDate):base.profile.startDate
+      startDate:Object.prototype.hasOwnProperty.call(p,'startDate')?(isDate(p.startDate)?String(p.startDate):''):base.profile.startDate
     },
     principles:{summary:base.principles.summary, items:base.principles.items.slice()},
     entries:[], logs:{}, stock:[], ingredients:[],
@@ -684,8 +702,17 @@ function saveLocal(silent){
 /* 저장 = 이 폰(localStorage) 먼저, 성공하면 클라우드로 디바운스 반영 */
 function save(silent){
   var ok=saveLocal(silent);
-  if(ok) cloudPush();
+  if(ok){
+    sync.dirty=true;              /* 클라우드에 아직 못 올린 변경이 있음 */
+    writeSyncMeta(sync.code);
+    cloudPush();
+  }
   return ok;
+}
+/* 보기 상태(탭·선택 날짜·달력 월·원칙 접기)만 바뀐 경우:
+   이 폰에만 저장하고 클라우드에는 올리지 않습니다. */
+function saveUi(silent){
+  return saveLocal(silent);
 }
 
 var state=loadState();
@@ -862,7 +889,7 @@ function renderPrinciples(){
   if(d){
     d.addEventListener('toggle', function(){
       state.ui.ruleOpen=d.open;
-      save(true);
+      saveUi(true);
     });
   }
 }
@@ -1735,7 +1762,7 @@ function openSettings(){
   var body='<div class="sec-head" style="margin:0 0 8px"><span class="sec-title">아기 정보</span></div>'+
     '<form id="profileForm" novalidate>'+
       '<label class="field">아기 이름<input id="fName" type="text" maxlength="20" value="'+esc(state.profile.name||'')+'" placeholder="예: 우리 아기"></label>'+
-      '<p class="sheet-note" style="margin:-6px 0 12px">'+(sync.status==='on'?'가족 공유 중이라 이름·생일도 같은 코드를 쓴 기기끼리 함께 보여요.':'이름·생일은 이 기기(브라우저)에만 저장돼요.')+' 이름을 비우면 \'우리 아기\'로 보여요.</p>'+
+      '<p class="sheet-note" style="margin:-6px 0 12px" id="profileSyncNote">'+(sync.status==='on'?'가족 공유 중이라 이름·생일도 같은 코드를 쓴 기기끼리 함께 보여요.':'이름·생일은 이 기기(브라우저)에만 저장돼요.')+' 이름을 비우면 \'우리 아기\'로 보여요.</p>'+
       '<div class="field-row">'+
         '<label class="field">생일<input id="fBirth" type="date" value="'+esc(state.profile.birth||'')+'"></label>'+
         '<label class="field">이유식 시작일<input id="fStartDate" type="date" value="'+esc(state.profile.startDate||'')+'"></label>'+
@@ -1759,7 +1786,7 @@ function openSettings(){
     '<button type="button" class="btn btn-ghost btn-block" data-act="import-text">붙여넣은 데이터 불러오기</button>'+
     (undoRec?'<button type="button" class="btn btn-ghost btn-block" style="margin-top:8px" data-act="undo-import">↩︎ 불러오기 직전으로 되돌리기'+(fmtStamp(undoRec.at)?' · '+fmtStamp(undoRec.at):'')+'</button>':'')+
     '<div class="sec-head" style="margin:24px 0 8px"><span class="sec-title">처음 상태로</span></div>'+
-    '<p class="sheet-note">기록·재고·도감이 기본값으로 돌아가요. 되돌릴 수 없어요.'+(sync.status==='on'?' 가족 공유 중이라 연결된 다른 기기에도 함께 반영돼요.':'')+'</p>'+
+    '<p class="sheet-note" id="resetSyncNote">기록·재고·도감이 기본값으로 돌아가요. 되돌릴 수 없어요.'+(sync.status==='on'?' 가족 공유 중이라 연결된 다른 기기에도 함께 반영돼요.':'')+'</p>'+
     '<button type="button" class="btn btn-danger btn-block" data-act="reset" id="resetBtn">전체 초기화</button>';
   openSheet({title:'설정 · 백업', body:body, onMount:function(root){
     var pf=root.querySelector('#profileForm');
@@ -1825,6 +1852,7 @@ function applyImport(obj){
     '<p class="sheet-note">백업 내용 — 식단 '+next.entries.length+'개 · 먹인 기록 '+nLogs+'일 · 재고 '+next.stock.length+'개 · 재료 '+next.ingredients.length+'개 · 브랜드 '+next.brands.length+'개'+
       (when?'<br>백업 시각 '+when:'')+'</p>'+
     '<p class="sheet-note">지금 상태는 되돌리기용으로 한 번 보관해 둘게요. 설정에서 되돌릴 수 있어요.</p>'+
+    (sync.status==='on'?'<p class="sheet-note" style="font-weight:800;color:#C0573F">가족 공유 중이에요. 불러온 내용이 같은 코드를 쓴 모든 기기에 함께 반영돼요.</p>':'')+
     '<div class="sheet-actions">'+
       '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
       '<button type="button" class="btn btn-primary" id="importYes">불러오기</button>'+
@@ -1836,9 +1864,10 @@ function applyImport(obj){
 function doImport(next){
   try{ localStorage.setItem(UNDO_KEY, JSON.stringify({at:new Date().toISOString(), state:state})); }
   catch(e){}
+  try{ next.ui=state.ui; }catch(e){}   /* 보고 있던 탭·날짜는 그대로 */
   state=next;
   save(); closeSheet(); render();
-  toast('백업을 불러왔어요');
+  toast(sync.status==='on'?'백업을 불러왔어요 · 가족 공유 중이라 다른 기기에도 반영돼요':'백업을 불러왔어요');
 }
 function undoImport(){
   var rec=readUndo();
@@ -1899,13 +1928,21 @@ function importText(){
   catch(e){ toast('불러오지 못했어요: '+e.message); }
 }
 
+function doResetAll(){
+  state=seedState();
+  try{ localStorage.removeItem(KEY); }catch(e){}
+  save(true); closeSheet(); render();
+  toast(sync.status==='on'?'처음 상태로 돌아갔어요 · 가족 공유 중이라 다른 기기에도 반영돼요':'처음 상태로 돌아갔어요');
+}
 function resetAll(btn){
-  if(btn.getAttribute('data-armed')==='1'){
-    state=seedState();
-    try{ localStorage.removeItem(KEY); }catch(e){}
-    save(true); closeSheet(); render(); toast('처음 상태로 돌아갔어요');
+  if(sync.status==='on'){
+    /* 가족 공유 중이면 모든 기기에 반영되므로 한 번 더 확인 */
+    confirmDo('전체 초기화',
+      '가족 공유 중이에요. 초기화하면 같은 가족 코드를 쓴 모든 기기의 기록·재고·도감이 함께 기본값으로 돌아가요. 되돌릴 수 없어요.',
+      '모든 기기 초기화', doResetAll);
     return;
   }
+  if(btn.getAttribute('data-armed')==='1'){ doResetAll(); return; }
   btn.setAttribute('data-armed','1');
   btn.textContent='한 번 더 누르면 초기화돼요';
   btn.style.background='#FBEAE4';
@@ -1922,13 +1959,13 @@ function selectDate(d){
   if(!isDate(d)) return;
   state.ui.sel=d;
   state.ui.calMonth=monthKey(d);
-  save(true);
+  saveUi(true);
   render();
 }
 
 function setView(v){
   state.ui.view=v;
-  save(true);
+  saveUi(true);
   render();
   try{ window.scrollTo(0,0); }catch(e){}
 }
@@ -2060,8 +2097,11 @@ var CLOUD_CFG={
 };
 var FB_VER='10.14.1';
 var SYNC_KEY=KEY+'-sync';
+var SYNCED_KEY=KEY+'-synced';   /* 마지막으로 클라우드와 같았던 상태(3-way 병합 기준) */
 var SYNC_SUFFIX='_iyuk';
-var sync={code:'',deviceId:'',status:'off',err:'',db:null,doc:null,unsub:null,pushTimer:null,lastPush:null,lastPull:null,pendingRef:null};
+var sync={code:'',deviceId:'',status:'off',err:'',db:null,doc:null,unsub:null,pushTimer:null,
+  lastPush:null,lastPull:null,pendingRef:null,dirty:false,base:null,pushSeq:0};
+var pendingMergeToast=false;
 var fbSdk={loading:false,cbs:[]};
 
 function syncKey(){ return sync.status+'|'+sync.code+'|'+sync.err; }
@@ -2070,19 +2110,36 @@ function newDeviceId(){
   return 'dev-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
 }
 function readSyncMeta(){
-  var out={code:'',deviceId:''};
+  var out={code:'',deviceId:'',dirty:false};
   try{
     var raw=localStorage.getItem(SYNC_KEY);
     if(raw){
       var o=JSON.parse(raw);
-      if(o&&typeof o==='object'){ out.code=String(o.code||''); out.deviceId=String(o.deviceId||''); }
+      if(o&&typeof o==='object'){
+        out.code=String(o.code||'');
+        out.deviceId=String(o.deviceId||'');
+        out.dirty=o.dirty===true;
+      }
     }
   }catch(e){}
   if(!out.deviceId) out.deviceId=newDeviceId();
   return out;
 }
 function writeSyncMeta(code){
-  try{ localStorage.setItem(SYNC_KEY, JSON.stringify({code:code||'',deviceId:sync.deviceId,at:new Date().toISOString()})); }catch(e){}
+  try{ localStorage.setItem(SYNC_KEY, JSON.stringify({code:code||'',deviceId:sync.deviceId,at:new Date().toISOString(),dirty:sync.dirty===true})); }catch(e){}
+}
+/* 마지막으로 서버와 같았던 기록을 저장/불러오기 */
+function setBase(s){
+  try{ sync.base=syncData(s||{}); }catch(e){ sync.base=null; return; }
+  try{ localStorage.setItem(SYNCED_KEY, JSON.stringify(sync.base)); }catch(e){}
+}
+function loadBase(){
+  try{
+    var raw=localStorage.getItem(SYNCED_KEY);
+    if(!raw) return null;
+    var o=JSON.parse(raw);
+    return (o&&typeof o==='object')?o:null;
+  }catch(e){ return null; }
 }
 function cleanCode(v){
   return String(v==null?'':v).trim().toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,64);
@@ -2109,10 +2166,116 @@ function syncSummary(s){
   try{ logs=Object.keys((s&&s.logs)||{}).length; }catch(e){}
   return '식단 '+((s&&s.entries)||[]).length+'개 · 먹인 기록 '+logs+'일 · 재고 '+((s&&s.stock)||[]).length+'개 · 재료 '+((s&&s.ingredients)||[]).length+'개';
 }
-function syncSig(s){
-  try{ return JSON.stringify({a:s.profile,b:s.entries,c:s.logs,d:s.stock,e:s.ingredients,f:s.brands,g:s.principles}); }
-  catch(e){ return ''; }
+
+/* ═════ 서명·3-way 병합 도우미 ═════
+   화면 보기 설정(ui)과 저장 시각은 빼고 '기록 데이터'만 비교/병합합니니다. */
+function byIdAsc(a,b){ var x=String((a&&a.id)||''), y=String((b&&b.id)||''); return x<y?-1:(x>y?1:0); }
+function syncData(s){
+  s=(s&&typeof s==='object')?s:{};
+  var logs={};
+  try{ Object.keys(s.logs||{}).sort().forEach(function(k){ logs[k]=s.logs[k]; }); }catch(e){}
+  return {
+    profile:s.profile||{},
+    principles:s.principles||{},
+    entries:(Array.isArray(s.entries)?s.entries.slice():[]).sort(byIdAsc),
+    logs:logs,
+    stock:(Array.isArray(s.stock)?s.stock.slice():[]).sort(byIdAsc),
+    ingredients:(Array.isArray(s.ingredients)?s.ingredients.slice():[]).sort(byIdAsc),
+    brands:(Array.isArray(s.brands)?s.brands.slice():[]).sort(byIdAsc)
+  };
 }
+function syncSig(s){
+  try{ return JSON.stringify(syncData(s)); }catch(e){ return ''; }
+}
+function jstr(v){ try{ return JSON.stringify(v===undefined?null:v); }catch(e){ return ''; } }
+
+/* id 목록 병합: base(마지막 동기화 상태) 기준으로 한쪽만 바뀐 것은 그쪽을,
+   둘 다 바뀐 것은 이 폰 기록을 살립니다. 삭제도 그대로 전파됩니다. */
+function mergeListBy(baseArr,localArr,cloudArr){
+  var b={},l={},c={},order=[];
+  function idx(arr,map){ (arr||[]).forEach(function(it){ if(it&&it.id&&!map[String(it.id)]) map[String(it.id)]=it; }); }
+  idx(baseArr,b); idx(localArr,l); idx(cloudArr,c);
+  (localArr||[]).forEach(function(it){ if(it&&it.id){ var k=String(it.id); if(order.indexOf(k)<0) order.push(k); } });
+  (cloudArr||[]).forEach(function(it){ if(it&&it.id){ var k=String(it.id); if(order.indexOf(k)<0) order.push(k); } });
+  var out=[], conflicts=0;
+  order.forEach(function(k){
+    var bi=b[k], li=l[k], ci=c[k];
+    var bj=bi?jstr(bi):null, lj=li?jstr(li):null, cj=ci?jstr(ci):null;
+    var pick=null;
+    if(li&&ci){
+      if(lj===cj) pick=li;
+      else if(lj===bj) pick=ci;            /* 클라우드에서만 바꿈 */
+      else if(cj===bj) pick=li;            /* 이 폰에서만 바꿈 */
+      else { pick=li; conflicts++; }       /* 둘 다 바꿈 → 이 폰 우선 보존 */
+    } else if(li){
+      if(!(bi&&lj===bj)) pick=li;          /* 클라우드에서 지운 항목은 지움 */
+    } else if(ci){
+      if(!(bi&&cj===bj)) pick=ci;          /* 이 폰에서 지운 항목은 지움 */
+    }
+    if(pick) out.push(pick);
+  });
+  return {list:out,conflicts:conflicts};
+}
+/* 날짜 키로 된 기록(logs) 병합 */
+function mergeMapBy(baseMap,localMap,cloudMap){
+  var b=baseMap||{}, l=localMap||{}, c=cloudMap||{}, keys=[];
+  Object.keys(l).forEach(function(k){ keys.push(k); });
+  Object.keys(c).forEach(function(k){ if(keys.indexOf(k)<0) keys.push(k); });
+  keys.sort();
+  var out={}, conflicts=0;
+  keys.forEach(function(k){
+    var bi=b[k], li=l[k], ci=c[k];
+    var bj=bi?jstr(bi):null, lj=li?jstr(li):null, cj=ci?jstr(ci):null;
+    var pick=null;
+    if(li&&ci){
+      if(lj===cj) pick=li;
+      else if(lj===bj) pick=ci;
+      else if(cj===bj) pick=li;
+      else { pick=li; conflicts++; }
+    } else if(li){
+      if(!(bi&&lj===bj)) pick=li;
+    } else if(ci){
+      if(!(bi&&cj===bj)) pick=ci;
+    }
+    if(pick) out[k]=pick;
+  });
+  return {map:out,conflicts:conflicts};
+}
+/* 프로필·원칙처럼 통짜로 비교하는 묶음 */
+function mergeUnit(b,l,c){
+  var bj=jstr(b), lj=jstr(l), cj=jstr(c);
+  if(lj===cj) return l;
+  if(lj===bj) return c;
+  if(cj===bj) return l;
+  return l;   /* 둘 다 바뀜 → 이 폰 우선 */
+}
+/* base(없을 수 있음) · 이 폰 · 클라우드를 합쳐 하나의 기록으로 */
+function mergeStates(base,local,cloud){
+  var b=syncData(base), l=syncData(local), c=syncData(cloud);
+  var e=mergeListBy(b.entries,l.entries,c.entries);
+  var s=mergeListBy(b.stock,l.stock,c.stock);
+  var g=mergeListBy(b.ingredients,l.ingredients,c.ingredients);
+  var br=mergeListBy(b.brands,l.brands,c.brands);
+  var lg=mergeMapBy(b.logs,l.logs,c.logs);
+  var out={
+    version:1,
+    profile:mergeUnit(b.profile,l.profile,c.profile),
+    principles:mergeUnit(b.principles,l.principles,c.principles),
+    entries:e.list.sort(function(x,y){ return x.start<y.start?-1:(x.start>y.start?1:0); }),
+    logs:lg.map,
+    stock:s.list,
+    ingredients:g.list,
+    brands:br.list,
+    ui:(local&&local.ui)||null,
+    savedAt:(local&&local.savedAt)||null
+  };
+  out.conflicts=e.conflicts+s.conflicts+g.conflicts+br.conflicts+lg.conflicts;
+  return out;
+}
+/* 이 폰에 아직 새 기록이 없을 때(시드와 동일) */
+var seedSigCache=null;
+function seedSig(){ if(!seedSigCache) seedSigCache=syncSig(normalize(seedState())); return seedSigCache; }
+function isSeedLike(s){ try{ return syncSig(s)===seedSig(); }catch(e){ return false; } }
 
 /* ── Firebase SDK: 필요한 순간에만, 실패해도 앱은 그대로 ── */
 function fbReady(){ return !!(window.firebase&&window.firebase.firestore&&window.firebase.apps); }
@@ -2158,18 +2321,65 @@ function cloudDocRef(db,code){
   try{ return db.collection('notes').doc(code+SYNC_SUFFIX); }catch(e){ return null; }
 }
 
-/* ── 올리기 ── */
+/* ── 올리기 ──
+   · 문서를 통째로 덮어쓰지 않고, 트랜잭션 안에서 최신본을 읽어 3-way 병합한 뒤 씁니다.
+     (오프라인 중 예약된 예전 내용이 다른 기기의 새 기록을 지우는 일을 막음) */
 function doPush(){
   if(sync.status!=='on'||!sync.doc) return false;
-  var payload;
-  try{ payload=JSON.stringify(state); }catch(e){ return false; }
+  if(sync.pushTimer){ clearTimeout(sync.pushTimer); sync.pushTimer=null; }
+  var db=sync.db, ref=sync.doc;
+  if(!db) return false;
+  var seq=++sync.pushSeq;
+  var from=null, to=null, pushed=null;
+
+  function txBody(tx){
+    return tx.get(ref).then(function(snap){
+      var remote=null;
+      if(snap&&snap.exists){
+        var d=snap.data()||{};
+        if(d.updatedBy!==sync.deviceId){
+          try{ remote=normalize(JSON.parse(String(d.payload||'null'))); }catch(e){ remote=null; }
+        }
+      }
+      var next=state;
+      if(remote&&syncSig(remote)!==syncSig(state)){
+        var m=mergeStates(sync.base,state,remote);
+        var conflicts=m.conflicts||0;
+        delete m.conflicts;
+        m.ui=state.ui;
+        if(syncSig(m)!==syncSig(state)){ next=m; if(conflicts) pendingMergeToast=true; }
+      }
+      from=state; to=next;
+      var body;
+      try{ body=JSON.stringify(syncData(next)); }catch(e){ throw e; }
+      pushed=body;
+      tx.set(ref,{
+        payload:body,
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy:sync.deviceId
+      });
+    });
+  }
   try{
-    sync.doc.set({
-      payload:payload,
-      updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy:sync.deviceId
-    }).then(function(){
+    db.runTransaction(txBody).then(function(){
+      if(seq!==sync.pushSeq) return;
       sync.lastPush=new Date().toISOString();
+      /* 병합된 상대 내용을 이 폰에도 반영 (그 사이 로컬이 또 바뀌지 않았을 때만) */
+      try{
+        if(to&&from&&syncSig(state)===syncSig(from)&&syncSig(to)!==syncSig(from)){
+          state=to; saveLocal(true); render();
+        }
+      }catch(e){}
+      var now=null;
+      try{ now=JSON.stringify(syncData(state)); }catch(e){}
+      if(now===pushed){
+        sync.dirty=false;
+        setBase(state);
+        writeSyncMeta(sync.code);
+      } else {
+        cloudPush();                     /* 올리는 사이 또 바뀜 → 한 번 더 */
+      }
+      if(pendingMergeToast){ pendingMergeToast=false; toast('☁️ 다른 기기 기록을 합쳐서 올렸어요'); }
       paintCloud();
     },function(err){
       sync.err=(err&&err.message)?err.message:'클라우드에 올리지 못했어요';
@@ -2181,22 +2391,66 @@ function doPush(){
 function cloudPush(){
   if(sync.status!=='on'||!sync.doc) return;
   clearTimeout(sync.pushTimer);
-  sync.pushTimer=setTimeout(doPush,300);
+  sync.pushTimer=setTimeout(function(){ sync.pushTimer=null; doPush(); },300);
+}
+/* 화면을 떠나기 직전: 대기 중인 디바운스 업로드를 즉시 보냅니다 */
+function flushPush(){
+  if(sync.pushTimer){ clearTimeout(sync.pushTimer); sync.pushTimer=null; }
+  if(sync.dirty&&sync.status==='on'&&sync.doc) return doPush();
+  return false;
 }
 
 /* ── 받기 ── */
-function applyCloudData(data,quiet){
+function applyCloudData(data,quiet,force){
   if(!data||typeof data!=='object') return false;
-  var next;
-  try{ next=normalize(data); }catch(e){ return false; }
-  if(syncSig(next)===syncSig(state)) return false;   /* 부팅 직후·되돌아온 메아리는 무시 */
+  var cloud;
+  try{ cloud=normalize(data); }catch(e){ return false; }
   var ui=state.ui;                                  /* 보기 설정(탭·날짜)은 기기별로 유지 */
-  next.ui=ui;
-  state=next;
+  var cloudSig=syncSig(cloud);
+
+  /* 사용자가 '☁️ 클라우드 기록 불러오기'를 직접 고른 경우 → 클라우드로 대체 */
+  if(force){
+    cloud.ui=ui;
+    var forceChanged=(cloudSig!==syncSig(state));
+    if(forceChanged){ state=cloud; saveLocal(true); render(); }
+    setBase(cloud);
+    sync.dirty=false;
+    writeSyncMeta(sync.code);
+    sync.lastPull=new Date().toISOString();
+    if(forceChanged&&!quiet) toast('☁️ 클라우드 기록을 불러왔어요');
+    return forceChanged;
+  }
+
+  /* 이 폰에 아직 새 기록이 없으면(시드 그대로) 클라우드 기록을 그대로 받아요 */
+  if(!sync.base&&isSeedLike(state)) return applyCloudData(data,quiet,true);
+
+  /* 기본은 덮어쓰기가 아니라 병합: 두 기기가 다른 날짜·항목을 고쳤어도 서로 살립니다 */
+  var merged=mergeStates(sync.base,state,cloud);
+  var conflicts=merged.conflicts||0;
+  delete merged.conflicts;
+  merged.ui=ui;
+  var localSig=syncSig(state);
+  var mergedSig=syncSig(merged);
+  sync.lastPull=new Date().toISOString();
+
+  if(mergedSig===localSig){
+    /* 이 폰이 이미 앞서 있거나 같음 → 표시만 정리하고 필요하면 이 폰 기록을 올림 */
+    setBase(cloud);
+    var ahead=(localSig!==cloudSig);
+    sync.dirty=ahead;
+    writeSyncMeta(sync.code);
+    if(ahead) cloudPush();
+    return false;
+  }
+
+  state=merged;
   saveLocal(true);
   render();
-  sync.lastPull=new Date().toISOString();
-  if(!quiet) toast('☁️ 다른 기기에서 바뀐 내용을 불러왔어요');
+  setBase(cloud);
+  sync.dirty=(mergedSig!==cloudSig);
+  writeSyncMeta(sync.code);
+  if(sync.dirty) cloudPush();
+  if(!quiet) toast(conflicts?'☁️ 다른 기기 기록을 합쳤어요 · 겹친 항목은 이 폰 기록을 남겼어요':'☁️ 다른 기기에서 바뀐 내용을 불러왔어요');
   return true;
 }
 function cloudSubscribe(){
@@ -2209,10 +2463,16 @@ function cloudSubscribe(){
       if(snap.metadata&&snap.metadata.hasPendingWrites) return;
       if(!snap.exists) return;                       /* delete 권한이 없어 사라질 일은 없음 */
       var d=snap.data()||{};
-      if(d.updatedBy===sync.deviceId){ paintCloud(); first=false; return; }
+      if(d.updatedBy===sync.deviceId){               /* 내가 올린 그대로 */
+        paintCloud(); first=false;
+        if(sync.dirty) cloudPush();                  /* 못 올린 변경이 있으면 마저 올림 */
+        return;
+      }
       var data=null;
       try{ data=JSON.parse(String(d.payload||'null')); }catch(e){}
-      var applied=applyCloudData(data,first);
+      /* 첫 스냅샷·재연결에서도 이 폰에 아직 못 올린 변경(dirty)이 있으면
+         무조건 덮어쓰지 않고 base 기준으로 합칩니다. */
+      applyCloudData(data,first);
       first=false;
       paintCloud();
     },function(err){
@@ -2267,12 +2527,14 @@ function connectCloud(rawCode,silent){
       if(!snap.exists){
         /* 클라우드가 비었을 때 → 이 폰 기록을 올리고 시작 */
         return ref.set({
-          payload:JSON.stringify(state),
+          payload:JSON.stringify(syncData(state)),
           updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
           updatedBy:sync.deviceId
         }).then(function(){
           sync.doc=ref;
           sync.lastPush=new Date().toISOString();
+          sync.dirty=false;
+          setBase(state);
           finishConnect(silent,'새 가족 공유를 시작했어요 · 이 폰 기록을 올렸어요');
         });
       }
@@ -2301,11 +2563,13 @@ function afterMergeUI(){
 }
 function askCloudMerge(ref,cloudTxt,mineTxt){
   sync.pendingRef=ref;
+  var seedLike=isSeedLike(state);
   var body='<p class="sheet-note" style="font-weight:700;color:#BF5C42">클라우드에 이미 저장된 기록이 있어요. 어느 쪽을 남길지 골라 주세요.</p>'+
     '<p class="sheet-note">☁️ 클라우드 · '+esc(cloudTxt)+'<br>📱 이 폰 · '+esc(mineTxt)+'</p>'+
-    '<p class="sheet-note">고르지 않은 쪽 기록은 사라져요. 한 번 더 확인하고 참여해 주세요.</p>'+
-    '<div class="sheet-actions" style="margin-top:0"><button type="button" class="btn btn-ghost" data-act="sync-merge-cloud">☁️ 클라우드 기록 불러오기</button></div>'+
-    '<div class="sheet-actions" style="margin-top:8px"><button type="button" class="btn btn-primary" data-act="sync-merge-phone">📱 이 폰 기록 올리기</button></div>'+
+    (seedLike?'<p class="sheet-note" style="font-weight:800;color:#3B7A57">이 폰에는 아직 새 기록이 없어요. 클라우드 기록을 불러오면 그대로 이어서 쓸 수 있어요.</p>':'')+
+    '<p class="sheet-note">고르지 않은 쪽 기록은 사라져요. 가족 공유 중이라 고른 기록이 같은 코드를 쓴 모든 기기에 반영됩니다.</p>'+
+    '<div class="sheet-actions" style="margin-top:0"><button type="button" class="btn btn-primary" data-act="sync-merge-cloud">☁️ 클라우드 기록 불러오기</button></div>'+
+    '<div class="sheet-actions" style="margin-top:8px"><button type="button" class="btn btn-ghost" data-act="sync-merge-phone">📱 이 폰 기록 올리기</button></div>'+
     '<div class="sheet-actions" style="margin-top:8px"><button type="button" class="btn btn-ghost" data-act="sync-merge-cancel">그만두기</button></div>';
   openSheet({title:'☁️ 가족 공유 연결',body:body});
 }
@@ -2317,7 +2581,7 @@ function mergeTakeCloud(){
     if(!snap.exists){ mergeTakePhone(); return; }
     var data=null;
     try{ data=JSON.parse(String((snap.data()||{}).payload||'null')); }catch(e){}
-    var ok=applyCloudData(data,true);
+    var ok=applyCloudData(data,true,true);
     sync.doc=ref; sync.pendingRef=null;
     finishConnect(false,ok?'클라우드 기록을 이 폰에 불러왔어요':'클라우드 기록이 이 폰과 같았어요');
     afterMergeUI();
@@ -2333,12 +2597,14 @@ function mergeTakePhone(){
   sync.status='connecting'; sync.err=''; paintCloud();
   try{
     ref.set({
-      payload:JSON.stringify(state),
+      payload:JSON.stringify(syncData(state)),
       updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy:sync.deviceId
     }).then(function(){
       sync.doc=ref; sync.pendingRef=null;
       sync.lastPush=new Date().toISOString();
+      sync.dirty=false;
+      setBase(state);
       finishConnect(false,'이 폰 기록을 클라우드에 올렸어요');
       afterMergeUI();
     },function(err){
@@ -2359,9 +2625,10 @@ function cancelConnect(){
 }
 function disconnectCloud(){
   if(sync.unsub){ try{ sync.unsub(); }catch(e){} sync.unsub=null; }
-  clearTimeout(sync.pushTimer);
+  clearTimeout(sync.pushTimer); sync.pushTimer=null;
   sync.status='off'; sync.code=''; sync.err=''; sync.doc=null; sync.db=null; sync.pendingRef=null;
-  sync.lastPush=null; sync.lastPull=null;
+  sync.lastPush=null; sync.lastPull=null; sync.base=null;
+  try{ localStorage.removeItem(SYNCED_KEY); }catch(e){}
   writeSyncMeta('');
   paintCloud();
   toast('☁️ 연결을 해제했어요 · 이 폰 기록은 그대로 있어요');
@@ -2393,6 +2660,17 @@ function syncBoxHtml(){
       '<button type="button" class="btn btn-ghost" data-act="sync-random">랜덤 코드</button>'+
     '</div>';
 }
+/* 설정 화면의 가족 공유 안내 문구를 현재 연결 상태에 맞게 즉시 갱신 (연결 해제 포함) */
+function paintSyncNotes(){
+  var p=document.getElementById('profileSyncNote');
+  if(p) p.textContent=(sync.status==='on'
+      ?'가족 공유 중이라 이름·생일도 같은 코드를 쓴 기기끼리 함께 보여요.'
+      :'이름·생일은 이 기기(브라우저)에만 저장돼요.')
+    +' 이름을 비우면 \'우리 아기\'로 보여요.';
+  var r=document.getElementById('resetSyncNote');
+  if(r) r.textContent='기록·재고·도감이 기본값으로 돌아가요. 되돌릴 수 없어요.'
+    +(sync.status==='on'?' 가족 공유 중이라 연결된 다른 기기에도 함께 반영돼요.':'');
+}
 function paintCloud(){
   var dot=document.getElementById('cloudDot');
   if(dot){
@@ -2410,11 +2688,14 @@ function paintCloud(){
     var last=document.getElementById('syncLast');
     if(last) last.textContent=lastSyncText();
   }
+  paintSyncNotes();
 }
 function initCloud(){
   var meta=readSyncMeta();
   sync.deviceId=meta.deviceId;
   sync.code=cleanCode(meta.code);
+  sync.dirty=meta.dirty===true;
+  sync.base=loadBase();
   paintCloud();
   if(sync.code.length>=8) connectCloud(sync.code,true);
 }
@@ -2439,13 +2720,13 @@ document.addEventListener('click', function(ev){
   var date=el.getAttribute('data-date');
   switch(act){
     case 'tab': setView(el.getAttribute('data-view')); break;
-    case 'mode': state.ui.mode=el.getAttribute('data-mode'); save(true); render(); break;
+    case 'mode': state.ui.mode=el.getAttribute('data-mode'); saveUi(true); render(); break;
     case 'sel-date': selectDate(date); break;
     case 'day-shift': selectDate(addDays(isDate(state.ui.sel)?state.ui.sel:todayISO(), Number(el.getAttribute('data-n')))); break;
     case 'go-today': selectDate(todayISO()); break;
     case 'cal-shift':
       state.ui.calMonth=shiftMonth(state.ui.calMonth||monthKey(state.ui.sel||todayISO()), Number(el.getAttribute('data-n')));
-      save(true); render();
+      saveUi(true); render();
       break;
     case 'log': openLogSheet(date); break;
     case 'log-del': deleteLog(date); break;
@@ -2516,20 +2797,111 @@ document.addEventListener('keydown', function(ev){
 });
 
 document.addEventListener('visibilitychange', function(){
-  if(!document.hidden){
-    if(todayISO()!==bootDay){
-      bootDay=todayISO();
-      state.ui.sel=bootDay;
-      state.ui.calMonth=monthKey(bootDay);
-    }
-    render();
+  if(document.hidden){
+    /* 화면을 떠나기 직전: 대기 중인 업로드를 즉시 전송 */
+    flushPush();
+    return;
   }
+  if(todayISO()!==bootDay){
+    bootDay=todayISO();
+    state.ui.sel=bootDay;
+    state.ui.calMonth=monthKey(bootDay);
+  }
+  render();
 });
+/* 앱이 백그라운드로 갈 때(pagehide)도 디바운스 대기분을 바로 올림 */
+window.addEventListener('pagehide', function(){ flushPush(); });
 
 /* 인터넷이 돌아오면 끊긴 가족 공유를 한 번 다시 시도 */
 window.addEventListener('online', function(){
   if(sync.code.length>=8&&(sync.status==='error'||sync.status==='off')) connectCloud(sync.code,true);
+  else flushPush();
 });
+
+/* ───────── 아래로 당겨서 새로고침 ─────────
+   · 맨 위(scrollY<=0)에서, 시트가 닫혀 있을 때만 동작
+   · 70px 이상 당기고 놓으면 인디케이터 후 새로고침
+   · 일반 스크롤·버튼 탭은 건드리지 않습니다. */
+var PULL_TRIGGER=70, PULL_MAX=120;
+var pull={on:false,from:0,dy:0,ready:false,busy:false};
+function pullEl(){ return document.getElementById('pullRefresh'); }
+function atTop(){
+  return (window.pageYOffset||document.documentElement.scrollTop||document.body.scrollTop||0)<=0;
+}
+function sheetIsOpen(){
+  var s=document.getElementById('sheet');
+  return document.body.classList.contains('sheet-open')||!!(s&&s.classList.contains('open'));
+}
+function pullReset(){
+  pull.on=false; pull.dy=0; pull.ready=false;
+  var el=pullEl();
+  if(el&&!pull.busy){
+    el.classList.remove('on','ready');
+    el.style.transform='';
+    el.textContent='↻ 새로고침';
+  }
+}
+function pullPaint(){
+  var el=pullEl();
+  if(!el) return;
+  el.classList.add('on');
+  el.classList.toggle('ready', pull.ready);
+  el.textContent=pull.ready?'↻ 놓으면 새로고침':'↻ 아래로 당겨 새로고침';
+  el.style.transform='translate(-50%,'+(-72+Math.min(80,pull.dy))+'px)';
+}
+document.addEventListener('touchstart', function(ev){
+  if(pull.busy||ev.touches.length!==1||sheetIsOpen()||!atTop()){ pull.on=false; return; }
+  pull.on=true; pull.from=ev.touches[0].clientY; pull.dy=0; pull.ready=false;
+},{passive:true});
+document.addEventListener('touchmove', function(ev){
+  if(!pull.on||pull.busy) return;
+  var dy=ev.touches[0].clientY-pull.from;
+  if(dy<=0){
+    if(pull.dy>0) pullReset();
+    if(dy<-8) pull.on=false;
+    return;
+  }
+  if(!atTop()){ pullReset(); return; }
+  if(ev.cancelable) ev.preventDefault();          /* 당기는 동안만 기본 동작 막음 */
+  pull.dy=dy;
+  pull.ready=(dy>=PULL_TRIGGER);
+  pullPaint();
+},{passive:false});
+document.addEventListener('touchend', function(){
+  if(!pull.on) return;
+  pull.on=false;
+  if(pull.ready&&!pull.busy){
+    pull.busy=true;
+    var el=pullEl();
+    if(el){
+      el.classList.remove('ready');
+      el.classList.add('on','busy');
+      el.textContent='↻ 새로고침 중...';
+      el.style.transform='translate(-50%,8px)';
+    }
+    setTimeout(function(){ try{ location.reload(); }catch(e){} },160);
+    return;
+  }
+  pullReset();
+},{passive:true});
+document.addEventListener('touchcancel', function(){ pull.on=false; pullReset(); },{passive:true});
+
+/* 스크롤했을 때만 상단 헤더에 그림자를 줘 내용과 확실히 구분 */
+var topbarEl=document.querySelector('.topbar');
+var stuckTick=false;
+function syncStuck(){
+  stuckTick=false;
+  if(!topbarEl) return;
+  var y=(window.pageYOffset||document.documentElement.scrollTop||0);
+  topbarEl.classList.toggle('stuck', y>2);
+}
+window.addEventListener('scroll', function(){
+  if(stuckTick) return;
+  stuckTick=true;
+  if(window.requestAnimationFrame) window.requestAnimationFrame(syncStuck);
+  else setTimeout(syncStuck,16);
+},{passive:true});
+syncStuck();
 
 render();
 initCloud();
