@@ -269,6 +269,30 @@ details[open] .chev{transform:rotate(180deg)}
 .stepper .qty{min-width:26px;text-align:center;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums}
 
 /* ── ingredients ── */
+.alert-card{background:linear-gradient(135deg,#FFF9F1,#FCEFE2);border:1px solid #F4E0CB;border-radius:18px;padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow)}
+.alert-card.urgent{background:linear-gradient(135deg,#FDF0EC,#FBE6DF);border-color:#F2D2C6}
+.alert-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px;font-weight:800;color:#8A4F38}
+.alert-row{display:flex;align-items:center;gap:10px;margin-top:9px;padding-top:9px;border-top:1px dashed #EFD9C8}
+.alert-row-main{flex:1;min-width:0;font-size:12.5px;line-height:1.4}
+.alert-row-main b{display:block;font-size:13.5px;color:#3F3A33}
+.alert-row-main span{color:#96867A;font-weight:600}
+.alert-row-main span.late{color:#B0452F;font-weight:800}
+.alert-foot{margin:8px 0 0;font-size:11px;color:#A2937F}
+.ing-alert .ing-suggest{margin-top:8px}
+.ing-suggest{margin-top:10px;border-radius:14px;background:#FDF4EA;border:1px solid #F4E2D0;padding:10px 12px}
+.ing-suggest.warn{background:#FBECE6;border-color:#F0CFC2}
+.ing-suggest p{margin:0;font-size:12.5px;font-weight:700;color:#7A5A47;line-height:1.45;word-break:keep-all}
+.ing-suggest.warn p{color:#A8442F}
+.ing-suggest-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.ing-prog{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:11.5px;font-weight:700;color:#A2937F}
+.ing-prog .bar{flex:1;margin:0}
+.ing-rx{margin:9px 0 0;padding:0;list-style:none;font-size:12px;color:#A8442F;font-weight:700}
+.ing-rx li+li{margin-top:3px}
+.ing-rx li span{color:#A2937F;font-weight:600;margin-right:5px}
+.rx-chips{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 6px}
+.rx-chips button{font-family:inherit;font-size:12px;font-weight:700;color:#877A6C;background:#FBF4EC;border:1px solid #F4E4D6;border-radius:999px;padding:6px 11px;cursor:pointer}
+.rx-chips button.on{background:var(--coral-soft);color:var(--coral-d);border-color:#F2C9B5}
+.rx-chips button.on.ok{background:#EAF4EC;color:#3B7A57;border-color:#CFE5D4}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:11px 6px;text-align:center;box-shadow:var(--shadow)}
 .stat b{display:block;font-size:19px;font-weight:900;letter-spacing:-.02em;line-height:1.15;font-variant-numeric:tabular-nums}
@@ -445,6 +469,7 @@ details[open] .chev{transform:rotate(180deg)}
     <div class="warnbar" id="warnbar">⚠ 이 화면은 자동 저장이 막혀 있어요. 파일 앱에서 열었다면 <b>공유 → Safari로 열기</b>로 다시 열어 주세요.</div>
     <section id="view-plan" class="view">
       <div id="heroMount"></div>
+      <div id="planWarnMount"></div>
       <div id="principlesMount" style="margin-top:10px"></div>
       <div class="seg-toggle" id="modeToggle">
         <button data-act="mode" data-mode="cal">월간</button>
@@ -886,6 +911,185 @@ function sumQty(list){
   return list.reduce(function(a,s){ return a+s.qty; },0);
 }
 
+/* ───────── 식단 ↔ 재고 연결 (팩 미도착 경고) ─────────
+   · 일정에 직접 연결한 팩(packIds)이 있으면 그것을 쓰고,
+   · 없으면 이름으로 추정합니다: '루솔 한우감자미음' ↔ '루솔 한우미음'·'루솔 감자' */
+var ALERT_DAYS=3;   /* 오늘부터 며칠 뒤 시작하는 식단까지 미리 확인할지 */
+function coreName(name,brand){
+  var s=String(name||'').replace(/\([^)]*\)/g,' ').replace(/\s+/g,' ').trim();
+  var parts=s.split(' ');
+  if(parts.length>1) parts.shift();          /* 앞 단어(브랜드 약칭) 떼기 */
+  s=parts.join('');
+  if(brand&&s.indexOf(String(brand).replace(/\s+/g,''))===0) s=s.slice(String(brand).replace(/\s+/g,'').length);
+  return s.replace(/(미음|죽|퓨레|이유식)$/,'');
+}
+function menuCore(e){
+  var parts=String(e&&e.menu||'').replace(/\s+/g,' ').trim().split(' ');
+  if(parts.length>1) parts.shift();
+  return parts.join('');
+}
+function sameBrand(a,b){
+  if(!a||!b) return true;
+  var x=String(a).replace(/\s+/g,''), y=String(b).replace(/\s+/g,'');
+  return x.indexOf(y)===0||y.indexOf(x)===0;
+}
+function entryStockFor(e){
+  var linked=packsOf(e);
+  if(linked.length) return {packs:linked, guessed:false};
+  var mc=menuCore(e), out=[];
+  if(!mc) return {packs:out, guessed:true};
+  state.stock.forEach(function(s){
+    var c=coreName(s.name,s.brand);
+    if(c&&mc.indexOf(c)>=0&&sameBrand(s.brand,e.brand)) out.push(s);
+  });
+  return {packs:out, guessed:true};
+}
+/* 다가오는(또는 진행 중인) 식단 중 필요한 팩이 아직 도착 전인 것 */
+function packAlerts(){
+  var t=todayISO(), until=addDays(t,ALERT_DAYS), out=[];
+  state.entries.forEach(function(e){
+    if(e.end<t||e.start>until) return;
+    var r=entryStockFor(e);
+    if(!r.packs.length) return;
+    var missing=r.packs.filter(function(s){
+      if(s.status!=='expected') return false;
+      /* 같은 재료 팩이 이미 냉장고에 있으면 괜찮음 */
+      var c=coreName(s.name,s.brand);
+      return !state.stock.some(function(o){
+        return o!==s&&o.status==='arrived'&&o.qty>0&&coreName(o.name,o.brand)===c&&sameBrand(o.brand,s.brand);
+      });
+    });
+    if(!missing.length) return;
+    out.push({e:e, items:missing, guessed:r.guessed, startsIn:diffDays(t,e.start)});
+  });
+  return out;
+}
+function packAlertsHTML(){
+  var list=packAlerts();
+  if(!list.length) return '';
+  var t=todayISO();
+  return list.map(function(a){
+    var e=a.e;
+    var when=a.startsIn<=0?'오늘 먹을 식단':(a.startsIn===1?'내일 시작':(mdShort(e.start)+' 시작 · D-'+a.startsIn));
+    var rows=a.items.map(function(s){
+      var st=!s.expected?'도착일 미정':(s.expected<t?mdShort(s.expected)+' 도착 예정이었어요':(s.expected===t?'오늘 도착 예정':mdShort(s.expected)+' 도착 예정'));
+      var late=!!(s.expected&&s.expected>e.start);
+      return '<div class="alert-row">'+
+        '<div class="alert-row-main"><b>'+esc(s.name)+'</b><span'+(late?' class="late"':'')+'>'+esc(st)+(late?' · 식단보다 늦어요':'')+'</span></div>'+
+        '<button type="button" class="mini mini-primary" data-act="stock-arrive" data-id="'+s.id+'">도착 처리</button>'+
+      '</div>';
+    }).join('');
+    return '<div class="alert-card'+(a.startsIn<=1?' urgent':'')+'">'+
+      '<div class="alert-head"><span>📦 팩이 아직 안 왔어요</span>'+
+        '<button type="button" class="linkbadge" data-act="plan-link" data-date="'+e.start+'">'+esc(when)+' · '+esc(e.short||e.menu)+'</button></div>'+
+      rows+
+      (a.guessed?'<p class="alert-foot">이름으로 찾은 팩이에요. 일정 수정에서 팩을 직접 연결하면 더 정확해져요.</p>':'')+
+    '</div>';
+  }).join('');
+}
+
+/* ───────── 재료 도감 ↔ 식단·먹인 기록 연결 ───────── */
+/* 반응 메모에서 확인이 필요한 증상 찾기 ('발진 없음'처럼 부정은 제외) */
+var RX_WORDS=/(두드러기|발진|빨갛|붉어|붉게|설사|묽은\s?변|구토|토했|토함|게워|변비|붓기|부었|부어|기침|쌕쌕|가려|보챔|보채)/g;
+var RX_CHIPS=['이상 없음','입가 발진','몸 발진','설사','구토','변비','보챔'];
+function reactionFlags(text){
+  var s=String(text||''), out=[], m;
+  RX_WORDS.lastIndex=0;
+  while((m=RX_WORDS.exec(s))){
+    var after=s.slice(m.index+m[0].length, m.index+m[0].length+8);
+    if(/^\s*(은|는|이|도|기|증상)?\s*(전혀\s*)?(없|x|X|안\s*보|안\s*남|안\s*생)/.test(after)) continue;
+    if(out.indexOf(m[0])<0) out.push(m[0]);
+  }
+  return out;
+}
+function ingMatchesEntry(g,e){
+  var n=String(g&&g.name||'').replace(/\s+/g,'');
+  if(!n||!e) return false;
+  return String(e.menu||'').replace(/\s+/g,'').indexOf(n)>=0||String(e.short||'').replace(/\s+/g,'').indexOf(n)>=0;
+}
+/* 이 재료가 들어간 식단에서 실제로 먹인 날들 (쉬어감 제외) */
+function ingLogDays(g){
+  var t=todayISO(), days=[];
+  state.entries.forEach(function(e){
+    if(!ingMatchesEntry(g,e)) return;
+    var d=e.start;
+    while(d<=e.end&&d<=t){
+      var lg=state.logs[d];
+      if(logHasEaten(lg)&&!days.some(function(x){ return x.date===d; })){
+        var flags=[];
+        logSlots(lg).forEach(function(x){
+          if(x.slot.amount==='skip') return;
+          var f=reactionFlags(x.slot.reaction);
+          if(f.length) flags.push({key:x.key, text:x.slot.reaction, words:f});
+        });
+        days.push({date:d, e:e, flags:flags});
+      }
+      d=addDays(d,1);
+    }
+  });
+  days.sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); });
+  return days;
+}
+/* 관찰중 재료: 첫 식단 기간(최대 3일)을 다 기록했는지 */
+function ingProgress(g){
+  var all=ingLogDays(g);
+  var days=g.first?all.filter(function(x){ return x.date>=g.first; }):all;
+  if(!days.length) days=all;
+  var fe=days.length?days[0].e:null;
+  if(!fe) state.entries.forEach(function(e){ if(!fe&&ingMatchesEntry(g,e)&&(!g.first||e.end>=g.first)) fe=e; });
+  var need=Math.min(3, fe?diffDays(fe.start,fe.end)+1:3);
+  var flagged=[];
+  days.forEach(function(x){ x.flags.forEach(function(f){ flagged.push({date:x.date,key:x.key,text:f.text}); }); });
+  return {count:days.length, need:need, ready:(g.status==='testing'&&days.length>=need), flagged:flagged, allFlagged:all.reduce(function(a,x){
+    x.flags.forEach(function(f){ a.push({date:x.date,key:x.key,text:f.text}); }); return a; },[])};
+}
+/* 먹인 기록 저장 시: 미시도 재료가 들어간 식단이면 '관찰중'으로, 첫 시도일도 채움 */
+function autoIngOnLog(date){
+  var e=entryForDate(date);
+  if(!e||!logHasEaten(state.logs[date])) return [];
+  var changed=[];
+  state.ingredients.forEach(function(g){
+    if(!ingMatchesEntry(g,e)) return;
+    if(g.status==='todo'){
+      g.status='testing';
+      if(!g.first||g.first>date) g.first=date;
+      changed.push(g.name);
+    }
+  });
+  return changed;
+}
+var ingSnooze={};   /* '나중에' 누른 통과 제안 (이번 화면에서만 숨김) */
+function ingSuggestHTML(g,p,compact){
+  if(g.status!=='testing') return '';
+  if(p.flagged.length){
+    return '<div class="ing-suggest warn">'+
+      '<p>⚠ 관찰 중 반응 메모가 있어요 · '+p.flagged.slice(0,2).map(function(f){ return esc(mdShort(f.date)+' '+slotLabel(f.key)+' '+f.text); }).join(' / ')+'</p>'+
+      '<div class="ing-suggest-btns">'+
+        '<button type="button" class="mini mini-warn" data-act="ing-status" data-id="'+g.id+'" data-v="caution">주의로 표시</button>'+
+        (p.ready?'<button type="button" class="mini" data-act="ing-status" data-id="'+g.id+'" data-v="done">그래도 통과</button>':'')+
+        (compact?'<button type="button" class="mini" data-act="ing-snooze" data-id="'+g.id+'">나중에</button>':'')+
+      '</div></div>';
+  }
+  if(!p.ready) return '';
+  return '<div class="ing-suggest">'+
+    '<p>✅ '+p.count+'일 기록을 마쳤어요. 이상 없었으면 통과로 바꿀까요?</p>'+
+    '<div class="ing-suggest-btns">'+
+      '<button type="button" class="mini mini-primary" data-act="ing-status" data-id="'+g.id+'" data-v="done">통과</button>'+
+      '<button type="button" class="mini mini-warn" data-act="ing-status" data-id="'+g.id+'" data-v="caution">주의</button>'+
+      (compact?'<button type="button" class="mini" data-act="ing-snooze" data-id="'+g.id+'">나중에</button>':'')+
+    '</div></div>';
+}
+/* 오늘 탭에 보여줄 재료 알림 (통과 제안·반응 확인) */
+function ingAlertsHTML(){
+  return state.ingredients.map(function(g){
+    if(g.status!=='testing'||ingSnooze[g.id]) return '';
+    var p=ingProgress(g);
+    if(!p.ready&&!p.flagged.length) return '';
+    var h=ingSuggestHTML(g,p,true);
+    return h?'<div class="alert-card ing-alert"><div class="alert-head"><span>'+esc(g.emoji||'🌱')+' '+esc(g.name)+' 관찰</span></div>'+h+'</div>':'';
+  }).join('');
+}
+
 /* ───────── 기록 슬롯(1식/2식) 도우미 ─────────
    기존 1식 기록 {amount,grams,reaction,shifted,at} 은 '오전' 슬롯 기록으로 그대로 읽힙니다.
    새 기록은 {am:{...}, pm:{...}, shifted, at} 형태로 저장됩니다. */
@@ -1186,6 +1390,11 @@ function renderPlan(){
     b.classList.toggle('on', b.getAttribute('data-mode')===mode);
   });
   $('#planMount').innerHTML=(mode==='cal')?calendarHTML():listHTML();
+  var pw=$('#planWarnMount');
+  if(pw){
+    var warnHtml=packAlertsHTML()+ingAlertsHTML();
+    pw.innerHTML=warnHtml?'<div style="margin-top:10px">'+warnHtml+'</div>':'';
+  }
 }
 
 function cellHTML(dayNum, dateStr, out, t, sel){
@@ -1316,7 +1525,7 @@ function itemHTML(s){
   var t=todayISO();
   var sub;
   if(s.status==='expected'){
-    if(s.expected) sub=mdShort(s.expected)+' 도착 예정'+(s.expected<t?' · 도착 확인 필요':'');
+    if(s.expected) sub=mdShort(s.expected)+' 도착 예정';
     else sub='도착 예정';
   } else {
     sub='도착 '+mdShort(s.arrived||t)+' · 냉장 '+(s.shelfLife||3)+'일';
@@ -1324,6 +1533,11 @@ function itemHTML(s){
   }
   if(s.expiryDate) sub+=' · 유통기한 '+mdShort(s.expiryDate);
   var expChip='';
+  if(s.status==='expected'&&s.expected){
+    if(s.expected<t) expChip='<div style="margin-top:6px"><span class="badge badge-warn">도착 확인 필요 · '+diffDays(s.expected,t)+'일 지남</span></div>';
+    else if(s.expected===t) expChip='<div style="margin-top:6px"><span class="badge badge-soon">📦 오늘 도착</span></div>';
+    else if(diffDays(t,s.expected)===1) expChip='<div style="margin-top:6px"><span class="badge badge-muted">내일 도착</span></div>';
+  }
   if(s.expiryDate&&s.qty>0&&s.status==='arrived'&&!s.opened){
     var leftE=diffDays(t,s.expiryDate);
     if(leftE<0) expChip='<div style="margin-top:6px"><span class="badge badge-warn">유통기한 지남</span></div>';
@@ -1401,8 +1615,25 @@ function renderStock(){
   html+='<div class="sec-head"><span class="sec-title">도착 예정</span><span class="sec-sub">'+sumQty(expected)+'팩</span></div>';
   html+=expected.length?expected.map(itemHTML).join(''):'<div class="card" style="color:#8B8574;font-size:12.5px">도착 예정인 팩이 없어요.</div>';
   html+='<button class="btn btn-ghost btn-block" style="margin-top:6px" data-act="stock-new">＋ 품목 추가</button>';
-  $('#stockWarnMount').innerHTML='';
+  var pa=packAlertsHTML();
+  $('#stockWarnMount').innerHTML=pa?'<div class="sec-head"><span class="sec-title">곧 먹을 식단 · 팩 확인</span><span class="sec-sub">'+ALERT_DAYS+'일 안</span></div>'+pa:'';
   $('#stockMount').innerHTML=html;
+}
+
+/* 재료 카드 아래: 관찰 진행도 · 통과 제안 · 반응 메모 모아보기 */
+function ingExtraHTML(g){
+  var p=ingProgress(g), html='';
+  if(g.status==='testing'){
+    var pct=Math.round(Math.min(1,p.count/Math.max(1,p.need))*100);
+    html+='<div class="ing-prog"><span>관찰 기록 '+Math.min(p.count,p.need)+'/'+p.need+'일</span><div class="bar"><i style="width:'+pct+'%"></i></div></div>';
+    html+=ingSuggestHTML(g,p,false);
+  }
+  if(p.allFlagged.length&&!(g.status==='testing'&&p.flagged.length)){
+    html+='<ul class="ing-rx">'+p.allFlagged.slice(-3).map(function(f){
+      return '<li><span>'+mdShort(f.date)+' '+slotLabel(f.key)+'</span>'+esc(f.text)+'</li>';
+    }).join('')+'</ul>';
+  }
+  return html;
 }
 
 function renderIng(){
@@ -1425,6 +1656,7 @@ function renderIng(){
         '<button class="mini" data-act="ing-edit" data-id="'+g.id+'">수정</button>'+
       '</div>'+
       '<div class="seg">'+seg+'</div>'+
+      ingExtraHTML(g)+
       '<input class="ing-memo" data-memo="'+g.id+'" type="text" value="'+esc(g.memo||'')+'" placeholder="메모 (예: 발진 없음, 다음엔 양 늘리기)">'+
     '</div>';
   }).join('');
@@ -1589,6 +1821,28 @@ function unshiftScheduleFrom(date){
   return moved;
 }
 
+/* 반응 빠른 선택: 누르면 메모에 넣고, 다시 누르면 빼요 */
+function rxHas(text,chip){ return String(text||'').split(/\s*[,·\/\n]\s*/).indexOf(chip)>=0; }
+function rxChipsHTML(text){
+  return RX_CHIPS.map(function(c){
+    var on=rxHas(text,c);
+    return '<button type="button" data-rx="'+esc(c)+'" class="'+(on?'on':'')+(c==='이상 없음'?' ok':'')+'">'+esc(c)+'</button>';
+  }).join('');
+}
+function rxToggle(text,chip){
+  var parts=String(text||'').split(/\s*,\s*/).map(function(x){ return x.trim(); }).filter(Boolean);
+  var i=parts.indexOf(chip);
+  if(i>=0) parts.splice(i,1);
+  else{
+    if(chip==='이상 없음') parts=parts.filter(function(x){ return RX_CHIPS.indexOf(x)<0; });
+    else parts=parts.filter(function(x){ return x!=='이상 없음'; });
+    var nChips=0;
+    while(nChips<parts.length&&RX_CHIPS.indexOf(parts[nChips])>=0) nChips++;
+    parts.splice(nChips,0,chip);   /* 빠른 선택 항목은 앞쪽에 모아요 */
+  }
+  return parts.join(', ');
+}
+
 function openLogSheet(date){
   var e=entryForDate(date);
   var prev=normLog(state.logs[date]);
@@ -1644,6 +1898,7 @@ function openLogSheet(date){
       '</div>'+unshiftWrap+
       '<label class="field" style="margin-top:16px">실제로 먹은 양 (g)<input id="fGrams" type="number" inputmode="numeric" step="1" min="0" max="400" data-def="'+esc(planGrams)+'" data-shifted="'+(shiftedAlready?'1':'0')+'" value="'+esc(grams)+'"></label>'+
       '<label class="field">반응 · 메모<textarea id="fReaction" rows="3" placeholder="예: 끝까지 잘 먹음. 입가 발진 없음">'+esc(rx)+'</textarea></label>'+
+      '<div class="rx-chips" id="rxChips">'+rxChipsHTML(rx)+'</div>'+
       (d?'<button type="button" class="btn btn-ghost btn-block slotclear" id="slotClear">이 끼니('+slotLabel(cur)+') 기록 지우기</button>':'');
   }
 
@@ -1681,8 +1936,25 @@ function openLogSheet(date){
       bodyEl.innerHTML=bodyHTML();
       syncAmtSkip(root);
     }
-    bodyEl.addEventListener('input', function(){ touched[cur]=true; });
+    bodyEl.addEventListener('input', function(ev){
+      touched[cur]=true;
+      if(ev.target&&ev.target.id==='fReaction'){
+        var rc=bodyEl.querySelector('#rxChips');
+        if(rc) rc.innerHTML=rxChipsHTML(ev.target.value);
+      }
+    });
     bodyEl.addEventListener('click', function(ev){
+      var rxb=ev.target.closest?ev.target.closest('[data-rx]'):null;
+      if(rxb){
+        var ta=bodyEl.querySelector('#fReaction');
+        if(ta){
+          ta.value=rxToggle(ta.value, rxb.getAttribute('data-rx'));
+          var rc2=bodyEl.querySelector('#rxChips');
+          if(rc2) rc2.innerHTML=rxChipsHTML(ta.value);
+        }
+        touched[cur]=true;
+        return;
+      }
       var cl=ev.target.closest?ev.target.closest('#slotClear'):null;
       if(cl){
         draft[cur]=null; touched[cur]=false;
@@ -1751,6 +2023,8 @@ function openLogSheet(date){
         if(res&&res.opened.length) notes.push('🌱 '+res.opened.join(' · ')+' 개봉 표시');
         else if(res&&res.first&&res.expected.length) notes.push('도착 예정 팩은 도착 처리하면 이어져요');
       }
+      var ingStarted=autoIngOnLog(date);
+      if(ingStarted.length) notes.push('🌱 '+ingStarted.join('·')+' 관찰 시작');
       save(); closeSheet(); render();
       var baseMsg;
       if(daySkipped) baseMsg=moved?('쉬어감으로 표시하고 일정 '+moved+'개를 하루 미뤘어요'):(shiftedAlready?'쉬어감으로 표시했어요 (일정은 그대로)':'쉬어감으로 표시했어요');
@@ -2658,8 +2932,14 @@ function deleteLog(date){
 
 function setIngStatus(id,v){
   if(!ING_LABEL[v]) return;
-  state.ingredients.forEach(function(g){ if(g.id===id) g.status=v; });
+  var nm='';
+  state.ingredients.forEach(function(g){
+    if(g.id!==id) return;
+    g.status=v; nm=g.name;
+    if(v==='testing'&&!g.first) g.first=todayISO();
+  });
   save(true); render();
+  if(nm) toast(nm+' → '+ING_LABEL[v]);
 }
 
 function deleteIng(id){
@@ -3383,6 +3663,7 @@ document.addEventListener('click', function(ev){
     case 'ing-new': openIngSheet(null); break;
     case 'ing-edit': openIngSheet(id); break;
     case 'ing-status': setIngStatus(id, el.getAttribute('data-v')); break;
+    case 'ing-snooze': ingSnooze[id]=true; render(); break;
     case 'ing-del': deleteIng(id); break;
     case 'brand-new': openBrandSheet(null); break;
     case 'brand-edit': openBrandSheet(id); break;
