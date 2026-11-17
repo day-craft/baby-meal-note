@@ -2616,12 +2616,13 @@ function mergeTakePhone(){
     sync.status='off'; sync.err='클라우드에 올리지 못했어요'; paintCloud();
   }
 }
-function cancelConnect(){
+function cancelConnect(reopen){
   sync.pendingRef=null; sync.doc=null; sync.code=''; sync.status='off'; sync.err='';
   writeSyncMeta('');
   paintCloud();
   toast('연결을 그만뒀어요 · 이 폰 기록은 그대로예요');
-  afterMergeUI();
+  if(reopen===false) closeSheet();
+  else afterMergeUI();
 }
 function disconnectCloud(){
   if(sync.unsub){ try{ sync.unsub(); }catch(e){} sync.unsub=null; }
@@ -2772,7 +2773,11 @@ document.addEventListener('click', function(ev){
     case 'sync-merge-cloud': mergeTakeCloud(); break;
     case 'sync-merge-phone': mergeTakePhone(); break;
     case 'sync-merge-cancel': cancelConnect(); break;
-    case 'close-sheet': closeSheet(); break;
+    case 'close-sheet':
+      /* 병합 선택지를 닫는 건 연결을 그만두는 것과 같음 (연결 중 상태로 남지 않도록) */
+      if(sync.pendingRef) cancelConnect(false);
+      else closeSheet();
+      break;
     case 'export': exportFile(); break;
     case 'export-text': copyBackup(); break;
     case 'import-text': importText(); break;
@@ -2793,7 +2798,10 @@ document.addEventListener('change', function(ev){
 });
 
 document.addEventListener('keydown', function(ev){
-  if(ev.key==='Escape') closeSheet();
+  if(ev.key==='Escape'){
+    if(sync.pendingRef) cancelConnect(false);
+    else closeSheet();
+  }
 });
 
 document.addEventListener('visibilitychange', function(){
