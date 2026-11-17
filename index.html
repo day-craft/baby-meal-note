@@ -25,13 +25,17 @@ body{
   margin:0;padding:0;min-height:100vh;
   font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Apple SD Gothic","Malgun Gothic",system-ui,"Segoe UI",sans-serif;
   color:var(--ink);font-size:15px;line-height:1.55;
-  background-color:var(--bg);
+  background:var(--bg);
+  -webkit-font-smoothing:antialiased;
+}
+/* iOS Safari에서 background-attachment:fixed가 깨지는 문제 -> 고정 레이어로 대체 */
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background-image:
     radial-gradient(680px 380px at 100% -6%, #FFE6D6 0%, rgba(255,230,214,0) 62%),
     radial-gradient(560px 340px at -8% 4%, #FFF0E1 0%, rgba(255,240,225,0) 58%);
-  background-repeat:no-repeat;background-attachment:fixed;
-  -webkit-font-smoothing:antialiased;
-}
+  background-repeat:no-repeat;background-position:top right,top left}
+/* 시트가 열린 동안 뒤 페이지 스크롤 잠금 (스크롤 위치는 JS가 보관) */
+body.sheet-open{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 button{font-family:inherit}
 .hidden{display:none !important}
 .warnbar{display:none;margin:0 0 12px;padding:11px 13px;border-radius:14px;background:#FFF1E6;border:1px solid #F6DBC9;
@@ -289,7 +293,7 @@ details[open] .chev{transform:rotate(180deg)}
 #sheet.open{display:block}
 .sheet-wrap{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center}
 .sheet-backdrop{position:absolute;inset:0;background:rgba(60,44,34,.38);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
-.sheet-panel{position:relative;width:min(540px,100%);max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+.sheet-panel{position:relative;width:min(540px,100%);max-height:92vh;max-height:92dvh;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
   background:var(--card);border-radius:26px 26px 0 0;padding:8px 18px calc(18px + env(safe-area-inset-bottom));
   box-shadow:0 -8px 30px rgba(80,52,36,.20);animation:panelIn .22s cubic-bezier(.22,.8,.3,1)}
 @keyframes panelIn{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
@@ -300,6 +304,7 @@ details[open] .chev{transform:rotate(180deg)}
 .sheet-actions{display:flex;gap:8px;margin-top:18px}
 .sheet-actions .btn{flex:1}
 .sheet-note{font-size:11.5px;color:#AB9D8F;line-height:1.55;margin:0 0 14px}
+.sheet-note.err{color:#BF5C42;background:#FDF0EA;border:1px solid #F5DACB;border-radius:12px;padding:9px 11px;font-weight:700;white-space:pre-wrap}
 
 /* ── forms ── */
 .field{display:block;font-size:12px;font-weight:800;color:#8A7C6E;margin-bottom:12px}
@@ -394,6 +399,10 @@ details[open] .chev{transform:rotate(180deg)}
 'use strict';
 
 var KEY='yebin-iyuk-planner-v1';
+var UNDO_KEY=KEY+'-undo';
+var CORRUPT_KEY=KEY+'-corrupt';
+var bootCorrupt=false;
+var sheetScrollY=0;
 var AMOUNTS=[{v:'full',l:'완식',e:'😋'},{v:'half',l:'절반',e:'🙂'},{v:'little',l:'조금',e:'😕'},{v:'refuse',l:'거부',e:'🙈'},{v:'skip',l:'쉬어감',e:'⏸'}];
 var AMT_LABEL={full:'완식',half:'절반',little:'조금',refuse:'거부',skip:'쉬어감'};
 var ING_ST=[{v:'done',l:'통과'},{v:'testing',l:'관찰중'},{v:'caution',l:'주의'},{v:'todo',l:'미시도'}];
@@ -618,14 +627,40 @@ function loadState(){
   catch(e){ STORAGE_OK=false; return seedState(); }
   if(!raw) return seedState();
   try{ return normalize(JSON.parse(raw)); }
-  catch(e){ return seedState(); }
+  catch(e){
+    /* 저장된 JSON이 깨졌을 때: 시드로 덮어쓰기 전에 깨진 원문을 따로 보관 */
+    bootCorrupt=true;
+    try{ localStorage.setItem(CORRUPT_KEY, String(raw)); }catch(e2){}
+    return seedState();
+  }
+}
+function syncWarnbar(){
+  var wb=document.getElementById('warnbar');
+  if(wb) wb.classList.toggle('on', !STORAGE_OK);
 }
 function save(silent){
-  state.savedAt=new Date().toISOString();
-  try{ localStorage.setItem(KEY, JSON.stringify(state)); }
+  var nextAt=new Date().toISOString();
+  var prevAt=state.savedAt;
+  var payload;
+  state.savedAt=nextAt;
+  try{ payload=JSON.stringify(state); }
   catch(e){
+    state.savedAt=prevAt;
+    if(!silent) toast('저장할 데이터를 만들지 못했어요. 설정에서 백업해 두세요');
+    return false;
+  }
+  try{
+    localStorage.setItem(KEY, payload);
+    /* 쓰기에 성공했을 때만 savedAt을 확정하고 경고 배너를 내림 */
+    STORAGE_OK=true;
+    syncWarnbar();
+    return true;
+  }catch(e){
+    state.savedAt=prevAt;
     STORAGE_OK=false;
+    syncWarnbar();
     if(!silent) toast('자동 저장이 안 돼요. 설정에서 백업해 두세요');
+    return false;
   }
 }
 
@@ -633,7 +668,7 @@ var state=loadState();
 state.ui.sel=todayISO();
 state.ui.calMonth=monthKey(todayISO());
 var bootDay=todayISO();
-if(!STORAGE_OK){ var _wb=document.getElementById('warnbar'); if(_wb) _wb.classList.add('on'); }
+syncWarnbar();
 var toastTimer=null;
 
 /* ───────── 조회 도우미 ───────── */
@@ -654,6 +689,47 @@ function findStock(id){
 }
 function sumQty(list){
   return list.reduce(function(a,s){ return a+s.qty; },0);
+}
+function cloneEntry(e){
+  return {id:e.id, start:e.start, end:e.end, menu:e.menu, brand:e.brand||'',
+    short:e.short||'', grams:(e.grams==null?'':String(e.grams)), note:e.note||'', packId:e.packId||null};
+}
+/* 저장된 먹인 기록(state.logs)의 날짜 키를 일정과 함께 이동.
+   - mapFn이 같은 날짜를 돌려주면 그대로
+   - 옮길 자리에 이미 다른 기록이 있으면 기록을 잃지 않도록 원래 날짜에 남김 */
+function remapLogs(mapFn){
+  var src=state.logs||{}, kept={}, moved=[], out={};
+  Object.keys(src).forEach(function(k){
+    var nk=mapFn(k);
+    if(!nk||nk===k){ kept[k]=src[k]; return; }
+    moved.push({from:k, to:nk, v:src[k]});
+  });
+  Object.keys(kept).forEach(function(k){ out[k]=kept[k]; });
+  moved.forEach(function(m){
+    if(!out[m.to]) out[m.to]=m.v;
+    else if(!out[m.from]) out[m.from]=m.v;
+  });
+  state.logs=out;
+}
+/* rec와 날짜가 겹치는 다른 일정들 (정렬 후 앞뒤 비교) */
+function overlapHits(list, recId){
+  var sorted=list.slice().sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
+  var hits=[];
+  for(var i=1;i<sorted.length;i++){
+    var a=sorted[i-1], b=sorted[i];
+    if(b.start<=a.end){
+      var other=null;
+      if(a.id===recId) other=b;
+      else if(b.id===recId) other=a;
+      if(other&&hits.indexOf(other)<0) hits.push(other);
+    }
+  }
+  return hits;
+}
+function fmtStamp(isoStr){
+  var d=new Date(isoStr);
+  if(isNaN(d.getTime())) return '';
+  return (d.getMonth()+1)+'월 '+d.getDate()+'일 '+pad2(d.getHours())+':'+pad2(d.getMinutes());
 }
 
 /* ───────── 렌더 ───────── */
@@ -976,21 +1052,26 @@ function itemHTML(s){
 function renderStock(){
   var t=todayISO();
   var opened=state.stock.filter(function(s){ return !!s.opened&&s.qty>0; });
-  var warn='<div class="sec-head"><span class="sec-title">개봉 중 · D-day</span><span class="sec-sub">개봉 후 3일 안에</span></div>';
+  var warn='<div class="sec-head"><span class="sec-title">개봉 중 · D-day</span><span class="sec-sub">개봉일 포함 3일 안에</span></div>';
   if(!opened.length){
     warn+='<div class="card" style="color:#8B8574;font-size:12.5px;line-height:1.5">지금 개봉 중인 팩이 없어요.<br>팩을 뜯으면 <b>개봉일 기록</b>을 눌러 D-day를 켜 두세요.</div>';
   } else {
     warn+=opened.map(function(s){
       var life=Math.max(1,s.shelfLife||3);
-      var deadline=addDays(s.opened,life);
-      var left=diffDays(t,deadline);
+      /* 개봉한 날을 1일째로 계산: 11/17 개봉 · 3일 → 11/19까지 */
+      var openedDeadline=addDays(s.opened,life-1);
+      var exp=(s.expiryDate&&isDate(s.expiryDate))?s.expiryDate:'';
+      var byExpiry=!!(exp&&exp<openedDeadline);
+      var limit=byExpiry?exp:openedDeadline;
+      var left=diffDays(t,limit);
       var cls=left<0?'over':(left<=1?'urgent':(left<=2?'warn':''));
       var lab=left<0?'기한 지남':(left===0?'오늘까지':'D-'+left);
-      var used=Math.min(1,Math.max(0,(life-left)/life));
+      var span=Math.max(1,diffDays(s.opened,limit));
+      var used=Math.min(1,Math.max(0,diffDays(s.opened,t)/span));
       return '<div class="dday '+cls+'">'+
         '<div class="dday-main">'+
           '<div class="dday-name">'+esc(s.name)+'<span class="tag">'+s.size+'g</span></div>'+
-          '<div class="dday-sub">개봉 '+mdShort(s.opened)+' · '+mdShort(deadline)+'까지</div>'+
+          '<div class="dday-sub">개봉 '+mdShort(s.opened)+' · '+mdShort(limit)+'까지'+(byExpiry?' · 유통기한 기준':'')+'</div>'+
           '<div class="bar"><i style="width:'+Math.round(used*100)+'%"></i></div>'+
         '</div>'+
         '<div class="dday-side">'+
@@ -1091,12 +1172,28 @@ function openSheet(opts){
     '</div>'+
   '</div>';
   el.classList.add('open');
+  lockScroll();
   if(opts.onMount) opts.onMount(el);
 }
 function closeSheet(){
   var el=document.getElementById('sheet');
   el.classList.remove('open');
   el.innerHTML='';
+  unlockScroll();
+}
+function lockScroll(){
+  var b=document.body;
+  if(!b||b.classList.contains('sheet-open')) return;
+  sheetScrollY=window.pageYOffset||document.documentElement.scrollTop||0;
+  b.style.top=(-sheetScrollY)+'px';
+  b.classList.add('sheet-open');
+}
+function unlockScroll(){
+  var b=document.body;
+  if(!b||!b.classList.contains('sheet-open')) return;
+  b.classList.remove('sheet-open');
+  b.style.top='';
+  try{ window.scrollTo(0,sheetScrollY); }catch(e){}
 }
 function confirmDo(title,msg,label,fn){
   openSheet({
@@ -1132,12 +1229,24 @@ function syncAmtSkip(root){
     g.disabled=false;
     g.style.opacity='';
     var prev=g.getAttribute('data-prev');
-    if(prev!==null){ g.value=prev; g.removeAttribute('data-prev'); }
+    if(prev!==null){
+      /* 쉬어감에서 되돌아올 때 data-prev가 0이거나 비어 있으면 계획량을 기본값으로 복원 */
+      var dflt=g.getAttribute('data-def')||'';
+      var pv=String(prev).trim();
+      g.value=(pv===''||Number(pv)===0)?dflt:prev;
+      g.removeAttribute('data-prev');
+    }
     if(extra) extra.classList.add('hidden');
+  }
+  /* 쉬어감으로 미뤘던 날을 다른 상태로 고칠 때만 '되돌리기' 선택지를 보여줌 */
+  var unWrap=scope.querySelector('#unshiftExtra');
+  if(unWrap){
+    var wasShifted=(g.getAttribute('data-shifted')==='1');
+    unWrap.classList.toggle('hidden', !(wasShifted&&!isSkip));
   }
 }
 
-/* 쉬어간 날 이후 일정을 하루씩 뒤로 밀기 */
+/* 쉬어간 날 이후 일정(과 먹인 기록)을 하루씩 뒤로 밀기 */
 function shiftScheduleFrom(date){
   var moved=0;
   state.entries.forEach(function(e){
@@ -1150,6 +1259,24 @@ function shiftScheduleFrom(date){
     }
   });
   state.entries.sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
+  /* 기준일(date)의 쉬어감 기록은 그대로 두고, 그 이후 기록만 따라 이동 */
+  remapLogs(function(k){ return k>date?addDays(k,1):k; });
+  return moved;
+}
+/* shiftScheduleFrom으로 밀었던 일정(과 먹인 기록)을 하루 앞으로 되돌리기 */
+function unshiftScheduleFrom(date){
+  var next=addDays(date,1), moved=0;
+  state.entries.forEach(function(e){
+    if(e.start===next){
+      e.start=addDays(e.start,-1); e.end=addDays(e.end,-1); moved++;
+    } else if(e.start<date&&e.end>=next){
+      e.end=addDays(e.end,-1); moved++;
+    } else if(e.start>next){
+      e.start=addDays(e.start,-1); e.end=addDays(e.end,-1); moved++;
+    }
+  });
+  state.entries.sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
+  remapLogs(function(k){ return k>date?addDays(k,-1):k; });
   return moved;
 }
 
@@ -1157,7 +1284,8 @@ function openLogSheet(date){
   var e=entryForDate(date);
   var log=state.logs[date];
   var amt=log?log.amount:'full';
-  var grams=log?log.grams:(e?String(e.grams).split('~')[0]:'');
+  var planGrams=e?String(e.grams||'').split('~')[0]:'';
+  var grams=log?log.grams:planGrams;
   var shiftedAlready=!!(log&&log.shifted);
   var body='<form id="logForm" novalidate>'+
     '<p class="sheet-note">'+mdLong(date)+' ('+dowOf(date)+') · '+esc(e?e.menu:'직접 기록')+'</p>'+
@@ -1166,11 +1294,18 @@ function openLogSheet(date){
     }).join('')+'</div>'+
     '<div class="hidden" id="skipExtra">'+
       '<p class="sheet-note" style="margin:10px 0 10px">아기 컨디션·외출 등으로 못 먹였으면 <b>쉬어감</b>. 섭취량은 0g으로 기록돼요.</p>'+
-      '<label class="check" style="margin:0 0 8px"><input type="checkbox" id="fShift"'+(shiftedAlready?'':' checked')+'> 이후 일정 하루씩 뒤로 미루기</label>'+
-      '<p class="sheet-note" style="margin:0 0 4px">진행 중인 식단은 이미 먹인 날은 그대로 두고 마지막 날만 하루 늘어나요. 그 뒤 식단은 하루씩 밀려요.'+
-        (shiftedAlready?'<br><b>이 날짜는 이미 한 번 미뤘어요.</b>':'')+'</p>'+
+      '<label class="check" style="margin:0 0 8px"><input type="checkbox" id="fShift"'+(!shiftedAlready?' checked':'')+(shiftedAlready?' disabled':'')+'> '+
+        (shiftedAlready?'이미 하루 미뤘어요 (다시 미루지 않아요)':'이후 일정 하루씩 뒤로 미루기')+'</label>'+
+      '<p class="sheet-note" style="margin:0 0 4px">'+
+        (shiftedAlready?'이 날짜는 이미 한 번 미뤘어요. 같은 일정이 두 번 밀리지 않도록 미루기는 꺼 두었어요.'
+          :'진행 중인 식단은 이미 먹인 날은 그대로 두고 마지막 날만 하루 늘어나요. 그 뒤 식단은 하루씩 밀려요.')+
+      '</p>'+
     '</div>'+
-    '<label class="field" style="margin-top:16px">실제로 먹은 양 (g)<input id="fGrams" type="number" inputmode="numeric" step="1" min="0" max="400" value="'+esc(grams)+'"></label>'+
+    '<div class="hidden" id="unshiftExtra">'+
+      '<label class="check" style="margin:10px 0 6px"><input type="checkbox" id="fUnshift"> 미뤄 둔 이후 일정을 하루 앞으로 되돌리기</label>'+
+      '<p class="sheet-note" style="margin:0 0 4px">이 날을 쉬어감으로 미뤘던 일정이 하루 당겨져요. 체크하지 않으면 일정은 그대로 둬요.</p>'+
+    '</div>'+
+    '<label class="field" style="margin-top:16px">실제로 먹은 양 (g)<input id="fGrams" type="number" inputmode="numeric" step="1" min="0" max="400" data-def="'+esc(planGrams)+'" data-shifted="'+(shiftedAlready?'1':'0')+'" value="'+esc(grams)+'"></label>'+
     '<label class="field">반응 · 메모<textarea id="fReaction" rows="3" placeholder="예: 끝까지 잘 먹음. 입가 발진 없음">'+esc(log?log.reaction:'')+'</textarea></label>'+
     '<div class="sheet-actions">'+
       '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
@@ -1187,19 +1322,24 @@ function openLogSheet(date){
       var g=(root.querySelector('#fGrams').value||'').trim();
       if(amt==='skip') g='0';
       var shiftBox=root.querySelector('#fShift');
-      var doShift=!!(amt==='skip'&&shiftBox&&shiftBox.checked);
+      /* 이미 미룬 날짜는 같은 일정이 두 번 밀리지 않도록 다시 미루지 않음 */
+      var doShift=!!(amt==='skip'&&!shiftedAlready&&shiftBox&&shiftBox.checked&&!shiftBox.disabled);
+      var unBox=root.querySelector('#fUnshift');
+      var doUnshift=!!(shiftedAlready&&amt!=='skip'&&unBox&&unBox.checked&&!unBox.disabled);
       var prevShifted=!!(log&&log.shifted);
       state.logs[date]={
         amount:amt,
         grams:g,
         reaction:(root.querySelector('#fReaction').value||'').trim(),
         at:new Date().toISOString(),
-        shifted:(prevShifted||doShift)
+        shifted:(amt==='skip'?(prevShifted||doShift):(prevShifted&&!doUnshift))
       };
-      var moved=0;
+      var moved=0, back=0;
       if(doShift) moved=shiftScheduleFrom(date);
+      if(doUnshift) back=unshiftScheduleFrom(date);
       save(); closeSheet(); render();
-      if(amt==='skip') toast(moved?'쉬어감으로 표시하고 일정 '+moved+'개를 하루 미뤘어요':'쉬어감으로 표시했어요');
+      if(amt==='skip') toast(moved?'쉬어감으로 표시하고 일정 '+moved+'개를 하루 미뤘어요':(prevShifted?'쉬어감으로 표시했어요 (일정은 그대로)':'쉬어감으로 표시했어요'));
+      else if(back) toast('기록을 고치고 일정 '+back+'개를 하루 당겼어요');
       else toast('기록을 저장했어요');
     });
   }});
@@ -1284,6 +1424,7 @@ function openEntrySheet(id, presetDate){
     '<label class="field">메모<textarea id="fNote" rows="2" placeholder="소분 방법, 관찰 포인트">'+esc(e?e.note:'')+'</textarea></label>'+
     (e?'<label class="check hidden" id="followWrap" style="margin:0 0 4px"><input type="checkbox" id="fFollow"> <span id="followLabel">이후 일정도 같이 조정</span></label>'+
       '<p class="sheet-note hidden" id="followNote" style="margin:0 0 10px"></p>':'')+
+    '<p class="sheet-note err hidden" id="entryErr"></p>'+
     '<div class="sheet-actions">'+
       '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
       '<button type="submit" class="btn btn-primary">'+(e?'수정 저장':'추가하기')+'</button>'+
@@ -1323,6 +1464,16 @@ function openEntrySheet(id, presetDate){
       });
       syncFollow();
     }
+    function showErr(msg){
+      var el=root.querySelector('#entryErr');
+      if(!el) return;
+      if(!msg){ el.classList.add('hidden'); el.textContent=''; return; }
+      el.textContent=msg;
+      el.classList.remove('hidden');
+    }
+    function laterWillFollow(delta){
+      return !!(delta!==0&&fBox&&!fBox.disabled&&fBox.checked&&laterList().length);
+    }
     root.querySelector('#entryForm').addEventListener('submit', function(ev){
       ev.preventDefault();
       var menu=(root.querySelector('#fMenu').value||'').trim();
@@ -1332,28 +1483,40 @@ function openEntrySheet(id, presetDate){
       if(!isDate(s)||!isDate(en)){ toast('날짜를 확인해 주세요'); return; }
       if(en<s){ var tmp=s; s=en; en=tmp; }
       var rec={
-        id:e?e.id:uid('e'), start:s, end:en, menu:menu,
+        id:e?e.id:uid('e'),
+        start:s, end:en, menu:menu,
         brand:(root.querySelector('#fBrand').value||'').trim(),
         short:((root.querySelector('#fShort').value||'').trim()||menu.replace(/\s*(미음|죽)$/,'').slice(-3)),
         grams:(root.querySelector('#fGrams').value||'').trim(),
         note:(root.querySelector('#fNote').value||'').trim(),
         packId:e?e.packId:null
       };
-      var delta=0, follow=false, oldEnd=e?e.end:'';
-      if(e){
-        delta=diffDays(e.end,en);
-        follow=!!(delta!==0&&fBox&&!fBox.disabled&&fBox.checked&&laterList().length);
-      }
-      if(e){ state.entries=state.entries.map(function(x){ return x.id===e.id?rec:x; }); }
-      else { state.entries.push(rec); }
+      var oldEnd=e?e.end:'';
+      var delta=e?diffDays(oldEnd,en):0;
+      var follow=e?laterWillFollow(delta):false;
+      /* 저장될 결과를 먼저 만들어 겹침을 검사 (시작일만 바꾼 경우도 포함) */
+      var next=state.entries.filter(function(x){ return x.id!==rec.id; }).map(cloneEntry);
+      next.push(cloneEntry(rec));
       var moved=0;
       if(follow){
-        state.entries.forEach(function(x){
+        next.forEach(function(x){
           if(x.id===rec.id) return;
           if(x.start>oldEnd){ x.start=addDays(x.start,delta); x.end=addDays(x.end,delta); moved++; }
         });
       }
-      state.entries.sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
+      var hits=overlapHits(next, rec.id);
+      if(hits.length){
+        var names=hits.map(function(x){ return '"'+x.menu+'" '+mdShort(x.start)+'~'+mdShort(x.end); }).join(', ');
+        var msg='다른 일정과 날짜가 겹쳐요: '+names;
+        if(e&&delta!==0&&fBox&&!fBox.disabled&&!fBox.checked) msg+='\n"'+fLabel.textContent+'"를 켜거나 날짜를 조정해 주세요.';
+        else msg+='\n날짜를 조정해 주세요.';
+        showErr(msg);
+        toast('다른 일정과 날짜가 겹쳐요');
+        return;
+      }
+      showErr('');
+      state.entries=next.sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
+      if(follow&&delta) remapLogs(function(k){ return k>oldEnd?addDays(k,delta):k; });
       save(); closeSheet(); render();
       if(!e) toast('일정을 추가했어요');
       else if(moved) toast('일정을 고치고 뒤 일정 '+moved+'개를 '+Math.abs(delta)+'일 '+(delta<0?'당겼어요':'밀었어요'));
@@ -1424,7 +1587,7 @@ function openOpenSheet(id){
     '<p class="sheet-note">'+esc(s.name)+' · '+s.size+'g · 지금 '+s.qty+'팩</p>'+
     '<label class="field">개봉일<input id="fOpened" type="date" value="'+todayISO()+'"></label>'+
     '<label class="field">냉장 기한 (일)<input id="fLife" type="number" inputmode="numeric" min="1" max="14" value="'+(s.shelfLife||3)+'"></label>'+
-    '<p class="sheet-note">개봉일부터 3일 안에 다 먹이는 걸로 계산해요. 냉동 보관은 하지 않아요.</p>'+
+    '<p class="sheet-note">개봉한 날 포함 3일 안에 다 먹이는 걸로 계산해요 (예: 11/17 개봉 → 11/19까지). 냉동 보관은 하지 않아요.</p>'+
     '<div class="sheet-actions">'+
       '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
       '<button type="submit" class="btn btn-primary">개봉 시작</button>'+
@@ -1530,6 +1693,7 @@ function deleteBrand(id){
 }
 
 function openSettings(){
+  var undoRec=readUndo();
   var savedTxt='아직 없음';
   if(state.savedAt){
     var d=new Date(state.savedAt);
@@ -1555,6 +1719,7 @@ function openSettings(){
     '<label class="field">파일 선택<input id="fImport" type="file" accept="application/json,.json"></label>'+
     '<label class="field">또는 붙여넣기<textarea id="fImportText" rows="3" placeholder="백업 데이터를 붙여넣으세요"></textarea></label>'+
     '<button type="button" class="btn btn-ghost btn-block" data-act="import-text">붙여넣은 데이터 불러오기</button>'+
+    (undoRec?'<button type="button" class="btn btn-ghost btn-block" style="margin-top:8px" data-act="undo-import">↩︎ 불러오기 직전으로 되돌리기'+(fmtStamp(undoRec.at)?' · '+fmtStamp(undoRec.at):'')+'</button>':'')+
     '<div class="sec-head" style="margin:24px 0 8px"><span class="sec-title">처음 상태로</span></div>'+
     '<p class="sheet-note">기록·재고·도감이 기본값으로 돌아가요. 되돌릴 수 없어요.</p>'+
     '<button type="button" class="btn btn-danger btn-block" data-act="reset" id="resetBtn">전체 초기화</button>';
@@ -1594,6 +1759,7 @@ function openSettings(){
       reader.onload=function(){
         try{ applyImport(JSON.parse(String(reader.result))); }
         catch(err){ toast('파일을 읽지 못했어요: '+err.message); }
+        finally{ try{ f.value=''; }catch(e){} }
       };
       reader.readAsText(file);
     });
@@ -1601,10 +1767,48 @@ function openSettings(){
 }
 
 /* ───────── 동작 ───────── */
+function readUndo(){
+  try{
+    var raw=localStorage.getItem(UNDO_KEY);
+    if(!raw) return null;
+    var o=JSON.parse(raw);
+    if(!o||typeof o!=='object'||!o.state) return null;
+    return o;
+  }catch(e){ return null; }
+}
+/* 불러오기 전에 한 번 확인받고, 덮어쓰기 직전 상태를 undo 키에 보관 */
 function applyImport(obj){
   if(!obj||typeof obj!=='object'||!Array.isArray(obj.entries)) throw new Error('형식이 맞지 않아요');
-  state=normalize(obj);
-  save(); closeSheet(); render(); toast('백업을 불러왔어요');
+  var next=normalize(obj);
+  var nLogs=Object.keys(next.logs||{}).length;
+  var when=next.savedAt?fmtStamp(next.savedAt):'';
+  var body='<p class="sheet-note" style="font-weight:700;color:#BF5C42">현재 기록이 백업 내용으로 바뀝니다. 진행할까요?</p>'+
+    '<p class="sheet-note">백업 내용 — 식단 '+next.entries.length+'개 · 먹인 기록 '+nLogs+'일 · 재고 '+next.stock.length+'개 · 재료 '+next.ingredients.length+'개 · 브랜드 '+next.brands.length+'개'+
+      (when?'<br>백업 시각 '+when:'')+'</p>'+
+    '<p class="sheet-note">지금 상태는 되돌리기용으로 한 번 보관해 둘게요. 설정에서 되돌릴 수 있어요.</p>'+
+    '<div class="sheet-actions">'+
+      '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
+      '<button type="button" class="btn btn-primary" id="importYes">불러오기</button>'+
+    '</div>';
+  openSheet({title:'백업 불러오기', body:body, onMount:function(root){
+    root.querySelector('#importYes').addEventListener('click', function(){ doImport(next); });
+  }});
+}
+function doImport(next){
+  try{ localStorage.setItem(UNDO_KEY, JSON.stringify({at:new Date().toISOString(), state:state})); }
+  catch(e){}
+  state=next;
+  save(); closeSheet(); render();
+  toast('백업을 불러왔어요');
+}
+function undoImport(){
+  var rec=readUndo();
+  if(!rec){ toast('되돌릴 백업이 없어요'); return; }
+  confirmDo('직전 상태로 되돌리기',(fmtStamp(rec.at)?fmtStamp(rec.at)+' ':'')+'불러오기 직전 상태로 되돌릴까요? 지금 화면의 기록은 사라져요.','되돌리기',function(){
+    state=normalize(rec.state);
+    try{ localStorage.removeItem(UNDO_KEY); }catch(e){}
+    save(); render(); toast('직전 상태로 되돌렸어요');
+  });
 }
 
 function exportFile(){
@@ -1748,6 +1952,8 @@ function deleteEntry(id){
         state.entries.forEach(function(x){
           if(x.start>e.end){ x.start=addDays(x.start,-days); x.end=addDays(x.end,-days); moved++; }
         });
+        /* 일정을 당긴 만큼 그 구간의 먹인 기록도 함께 이동 */
+        if(days) remapLogs(function(k){ return k>e.end?addDays(k,-days):k; });
       }
       state.entries.sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
       save(); closeSheet(); render();
@@ -1757,10 +1963,25 @@ function deleteEntry(id){
 }
 
 function deleteLog(date){
-  confirmDo('기록 삭제',mdLong(date)+' 먹인 기록을 지울까요?','삭제',function(){
-    delete state.logs[date];
-    save(); render(); toast('기록을 지웠어요');
-  });
+  var lg=state.logs[date];
+  var wasShifted=!!(lg&&lg.shifted);
+  var body='<p class="sheet-note">'+mdLong(date)+' 먹인 기록을 지울까요?</p>'+
+    (wasShifted?'<label class="check" style="margin:0 0 6px"><input type="checkbox" id="fUnshiftDel" checked> 미뤄 둔 이후 일정을 하루 앞으로 되돌리기</label>'+
+      '<p class="sheet-note" style="margin:0 0 8px">이 날 쉬어감으로 미뤘던 일정이 하루 당겨져요. 체크를 풀면 일정은 그대로 두고 기록만 지워요.</p>':'')+
+    '<div class="sheet-actions">'+
+      '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
+      '<button type="button" class="btn btn-danger" id="delLogYes">삭제</button>'+
+    '</div>';
+  openSheet({title:'기록 삭제', body:body, onMount:function(root){
+    root.querySelector('#delLogYes').addEventListener('click', function(){
+      var un=root.querySelector('#fUnshiftDel');
+      var doUn=!!(un&&un.checked);
+      delete state.logs[date];
+      var back=doUn?unshiftScheduleFrom(date):0;
+      save(); closeSheet(); render();
+      toast(back?'기록을 지우고 일정 '+back+'개를 하루 당겼어요':'기록을 지웠어요');
+    });
+  }});
 }
 
 function setIngStatus(id,v){
@@ -1844,6 +2065,7 @@ document.addEventListener('click', function(ev){
     case 'export': exportFile(); break;
     case 'export-text': copyBackup(); break;
     case 'import-text': importText(); break;
+    case 'undo-import': undoImport(); break;
     case 'reset': resetAll(el); break;
     default: break;
   }
@@ -1875,6 +2097,7 @@ document.addEventListener('visibilitychange', function(){
 });
 
 render();
+if(bootCorrupt) toast('저장 데이터가 깨져 있어 원문을 따로 보관했어요. 설정에서 백업을 확인해 주세요');
 })();
 </script>
 </body>
