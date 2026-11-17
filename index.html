@@ -3230,7 +3230,7 @@ function cloudDocRef(db,code){
 /* ── 올리기 ──
    · 문서를 통째로 덮어쓰지 않고, 트랜잭션 안에서 최신본을 읽어 3-way 병합한 뒤 씁니다.
      (오프라인 중 예약된 예전 내용이 다른 기기의 새 기록을 지우는 일을 막음) */
-function doPush(){
+function doPush(manual){
   if(sync.status!=='on'||!sync.doc) return false;
   if(sync.pushTimer){ clearTimeout(sync.pushTimer); sync.pushTimer=null; }
   var db=sync.db, ref=sync.doc;
@@ -3285,11 +3285,15 @@ function doPush(){
       } else {
         cloudPush();                     /* 올리는 사이 또 바뀜 → 한 번 더 */
       }
+      sync.err='';
       if(pendingMergeToast){ pendingMergeToast=false; toast('☁️ 다른 기기 기록을 합쳐서 올렸어요'); }
+      else if(manual) toast('☁️ 클라우드에 올렸어요 · '+fmtClock(sync.lastPush));
       paintCloud();
     },function(err){
-      sync.err=(err&&err.message)?err.message:'클라우드에 올리지 못했어요';
+      var code=(err&&err.code)?String(err.code):'';
+      sync.err=(code.indexOf('permission-denied')>=0)?'보안 규칙에 막혀 올리지 못했어요':((err&&err.message)?err.message:'클라우드에 올리지 못했어요');
       paintCloud();
+      if(manual) toast('☁️ 올리지 못했어요: '+sync.err+' · 이 폰 기록은 그대로예요');
     });
     return true;
   }catch(e){ return false; }
@@ -3547,6 +3551,7 @@ function syncBoxHtml(){
     return '<div class="sync-badge">☁️ 실시간 연결됨</div>'+
       '<p class="sheet-note" style="margin:10px 0 0">가족 코드 <span class="sync-code">'+esc(sync.code)+'</span></p>'+
       '<p class="sync-line" id="syncLast">'+esc(lastSyncText())+'</p>'+
+      (sync.err?'<p class="sheet-note err" style="margin:6px 0 0">⚠ '+esc(sync.err)+'</p>':'')+
       '<p class="sheet-note" style="margin:10px 0 10px">이 폰에서 고친 내용이 바로 클라우드에 올라가고, 같은 코드를 넣은 다른 기기에도 자동으로 나타나요.</p>'+
       '<div class="sheet-actions" style="margin-top:0">'+
         '<button type="button" class="btn btn-ghost" data-act="sync-push">지금 올리기</button>'+
@@ -3681,7 +3686,7 @@ document.addEventListener('click', function(ev){
       break;
     case 'sync-off': disconnectCloud(); break;
     case 'sync-push':
-      if(sync.status!=='on'||!doPush()){ toast('먼저 가족 코드로 연결해 주세요'); break; }
+      if(sync.status!=='on'||!doPush(true)){ toast('먼저 가족 코드로 연결해 주세요'); break; }
       toast('☁️ 클라우드에 올리는 중…');
       break;
     case 'sync-merge-cloud': mergeTakeCloud(); break;
