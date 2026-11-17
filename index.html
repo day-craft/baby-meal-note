@@ -8,8 +8,8 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="favicon.ico?v=2" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
-<meta name="apple-mobile-web-app-title" content="예빈 이유식">
-<title>예빈 이유식 노트</title>
+<meta name="apple-mobile-web-app-title" content="우리 아기 이유식">
+<title>우리 아기 이유식 노트</title>
 <style>
 :root{
   --bg:#FFFBF7; --card:#FFFEFC; --ink:#3F3A33; --ink-2:#5F574C; --muted:#9C8A7B;
@@ -351,7 +351,7 @@ details[open] .chev{transform:rotate(180deg)}
     <div class="brand">
       <div class="brand-mark">🥣</div>
       <div>
-        <h1>예빈 이유식 노트</h1>
+        <h1 id="appTitle">우리 아기 이유식 노트</h1>
         <p id="topMeta">불러오는 중…</p>
       </div>
     </div>
@@ -452,7 +452,7 @@ var PR_MAX=10;
 function seedState(){
   return {
     version:1,
-    profile:{name:'예빈', stage:'초기 1단계 · 미음', birth:'2026-05-07', startDate:'2026-11-09'},
+    profile:{name:'', stage:'초기 1단계 · 미음', birth:'', startDate:'2026-11-09'},
     principles:{
       summary:'냉동 없이 · 3일 관찰 · 1:1 믹스',
       items:[
@@ -513,9 +513,10 @@ function normalize(s){
   var out={
     version:1,
     profile:{
-      name:p.name?String(p.name):base.profile.name,
+      /* 저장된 값이 있으면 그대로 살리고, 없을 때만 빈 기본값 (코드에 이름·생일 하드코딩 없음) */
+      name:(p.name!=null?String(p.name).trim().slice(0,20):''),
       stage:p.stage?String(p.stage):base.profile.stage,
-      birth:isDate(p.birth)?String(p.birth):base.profile.birth,
+      birth:isDate(p.birth)?String(p.birth):'',
       startDate:isDate(p.startDate)?String(p.startDate):base.profile.startDate
     },
     principles:{summary:base.principles.summary, items:base.principles.items.slice()},
@@ -771,7 +772,15 @@ function mealDayText(startISO, todayStr){
   var n=diffDays(startISO, todayStr)+1;
   return n>=1?'이유식 '+n+'일차':'이유식 시작 전';
 }
+function babyName(){
+  var n=(state.profile&&state.profile.name)?String(state.profile.name).trim():'';
+  return n||'우리 아기';
+}
 function renderMeta(){
+  var nm=babyName(), title=nm+' 이유식 노트';
+  var h=document.getElementById('appTitle');
+  if(h&&h.textContent!==title) h.textContent=title;
+  if(document.title!==title) document.title=title;
   var el=$('#topMeta');
   if(el){
     var t=todayISO(), p=state.profile||{}, bits=[];
@@ -780,8 +789,9 @@ function renderMeta(){
     var md=mealDayText(p.startDate, t);
     if(md) bits.push(md);
     var stage=p.stage?String(p.stage):'';
+    if(stage&&!dd) bits.push(stage);
     el.innerHTML=(bits.length?'<span class="meta-main">'+esc(bits.join(' · '))+'</span>':'')+
-      (stage?'<span class="meta-stage">'+esc(stage)+'</span>':'');
+      (dd&&stage?'<span class="meta-stage">'+esc(stage)+'</span>':'');
   }
   var wb=document.getElementById('warnbar');
   if(wb) wb.classList.toggle('on', !STORAGE_OK);
@@ -1699,8 +1709,10 @@ function openSettings(){
     var d=new Date(state.savedAt);
     if(!isNaN(d.getTime())) savedTxt=(d.getMonth()+1)+'월 '+d.getDate()+'일 '+pad2(d.getHours())+':'+pad2(d.getMinutes());
   }
-  var body='<div class="sec-head" style="margin:0 0 8px"><span class="sec-title">'+esc(state.profile.name||'예빈')+'이 정보</span></div>'+
+  var body='<div class="sec-head" style="margin:0 0 8px"><span class="sec-title">아기 정보</span></div>'+
     '<form id="profileForm" novalidate>'+
+      '<label class="field">아기 이름<input id="fName" type="text" maxlength="20" value="'+esc(state.profile.name||'')+'" placeholder="예: 우리 아기"></label>'+
+      '<p class="sheet-note" style="margin:-6px 0 12px">이름·생일은 이 기기(브라우저)에만 저장돼요. 이름을 비우면 \'우리 아기\'로 보여요.</p>'+
       '<div class="field-row">'+
         '<label class="field">생일<input id="fBirth" type="date" value="'+esc(state.profile.birth||'')+'"></label>'+
         '<label class="field">이유식 시작일<input id="fStartDate" type="date" value="'+esc(state.profile.startDate||'')+'"></label>'+
@@ -1741,10 +1753,11 @@ function openSettings(){
       var sd=((root.querySelector('#fStartDate')||{}).value||'').trim();
       if(b&&!isDate(b)){ toast('생일 날짜를 확인해 주세요'); return; }
       if(sd&&!isDate(sd)){ toast('이유식 시작일을 확인해 주세요'); return; }
+      state.profile.name=((root.querySelector('#fName')||{}).value||'').trim().slice(0,20);
       state.profile.birth=b;
       state.profile.startDate=sd;
       state.profile.stage=((root.querySelector('#fStage')||{}).value||'').trim();
-      save(); closeSheet(); render(); toast('예빈이 정보를 저장했어요');
+      save(); closeSheet(); render(); toast('아기 정보를 저장했어요');
     });
     ['#fBirth','#fStartDate'].forEach(function(sel){
       var el=root.querySelector(sel);
