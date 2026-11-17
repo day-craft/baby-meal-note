@@ -160,6 +160,12 @@ button{font-family:inherit}
 .mini-warn{background:#FDF0EA;color:#BF5C42;border-color:#F5DACB}
 
 /* ── principles ── */
+details.fold{margin-bottom:9px}
+details.fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+  font-size:12.5px;font-weight:800;color:#9A8B7C;background:#FBF4EC;border:1px dashed #EEDCCB;border-radius:14px;padding:10px 12px}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold[open]>summary{margin-bottom:9px}
+.fold-note{margin:0 2px 8px;font-size:11.5px;color:#A2937F}
 details.card{padding:0;border-radius:18px}
 details.card>summary{list-style:none;cursor:pointer;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;
   font-size:13px;font-weight:800;color:#7C6E60;min-height:48px}
@@ -1498,7 +1504,7 @@ function listHTML(){
   if(!list.length){
     html+='<div class="card" style="color:#8B8574;font-size:12.5px;text-align:center">아직 식단이 없어요.</div>';
   } else {
-    html+=list.map(function(e){
+    var rowOf=function(e){
       var days=diffDays(e.start,e.end)+1;
       var badge;
       if(t>e.end) badge='<span class="badge badge-muted">지난 일정</span>';
@@ -1517,7 +1523,16 @@ function listHTML(){
         '</div>'+
         '<div class="row-side">'+badge+'<button class="mini" data-act="entry-edit" data-id="'+e.id+'">수정</button></div>'+
       '</div>';
-    }).join('');
+    };
+    /* 지난 일정은 위에 접어 두고, 진행 중·예정 일정만 바로 보여줘요 */
+    var past=list.filter(function(e){ return e.end<t; });
+    var rest=list.filter(function(e){ return e.end>=t; });
+    if(past.length){
+      var pastActive=past.some(function(e){ return sel>=e.start&&sel<=e.end; });
+      html+='<details class="fold"'+(pastActive?' open':'')+'><summary>🗂 지난 식단 '+past.length+'개 <span class="chev">▾</span></summary>'+
+        past.map(rowOf).join('')+'</details>';
+    }
+    html+=rest.length?rest.map(rowOf).join(''):'<div class="card" style="color:#8B8574;font-size:12.5px;text-align:center">앞으로 예정된 식단이 없어요.</div>';
   }
   var skipDays=Object.keys(state.logs).filter(function(k){
     return logAllSkip(state.logs[k]);
@@ -1639,7 +1654,15 @@ function renderStock(){
 
   var html=warn;
   html+='<div class="sec-head"><span class="sec-title">보유 · 냉장고</span><span class="sec-sub">'+sumQty(arrived)+'팩</span></div>';
-  html+=arrived.length?arrived.map(itemHTML).join(''):'<div class="card" style="color:#8B8574;font-size:12.5px">보유 중인 팩이 없어요.</div>';
+  /* 다 먹은 팩(0팩·개봉 안 함)은 아래에 접어 둬요 */
+  var inFridge=arrived.filter(function(s){ return s.qty>0||!!s.opened; });
+  var emptied=arrived.filter(function(s){ return !(s.qty>0||!!s.opened); });
+  html+=inFridge.length?inFridge.map(itemHTML).join(''):'<div class="card" style="color:#8B8574;font-size:12.5px">보유 중인 팩이 없어요.</div>';
+  if(emptied.length){
+    html+='<details class="fold"><summary>🗂 다 먹은 팩 '+emptied.length+'개 <span class="chev">▾</span></summary>'+
+      '<p class="fold-note">수량을 + 로 늘리면 다시 냉장고 목록으로 올라가요.</p>'+
+      emptied.map(itemHTML).join('')+'</details>';
+  }
   html+='<div class="sec-head"><span class="sec-title">도착 예정</span><span class="sec-sub">'+sumQty(expected)+'팩</span></div>';
   html+=expected.length?expected.map(itemHTML).join(''):'<div class="card" style="color:#8B8574;font-size:12.5px">도착 예정인 팩이 없어요.</div>';
   html+='<button class="btn btn-ghost btn-block" style="margin-top:6px" data-act="stock-new">＋ 품목 추가</button>';
@@ -1729,7 +1752,33 @@ function renderBrands(){
 }
 
 /* ───────── 시트(모달) ───────── */
+/* ── 뒤로가기(안드로이드 버튼·iOS 스와이프)로 시트 닫기 ──
+   시트를 열 때 방문 기록을 하나 쌓고, 뒤로가기가 오면 앱을 떠나는 대신 시트만 닫아요. */
+var sheetHist=false, ignorePop=false;
+function pushSheetHist(){
+  if(sheetHist||ignorePop) return;
+  try{ history.pushState({ybSheet:1},''); sheetHist=true; }catch(e){}
+}
+function popSheetHist(){
+  if(!sheetHist) return;
+  sheetHist=false;
+  try{ ignorePop=true; history.back(); }catch(e){ ignorePop=false; }
+}
+window.addEventListener('popstate', function(){
+  if(ignorePop){
+    ignorePop=false;
+    /* 닫자마자 다른 시트를 연 경우: 그 시트용 기록을 다시 쌓음 */
+    if(sheetIsOpen()&&!sheetHist) pushSheetHist();
+    return;
+  }
+  sheetHist=false;
+  if(!sheetIsOpen()) return;
+  if(sync.pendingRef) cancelConnect(false);
+  else closeSheet();
+});
+
 function openSheet(opts){
+  pushSheetHist();
   var el=document.getElementById('sheet');
   el.innerHTML='<div class="sheet-wrap">'+
     '<div class="sheet-backdrop" data-act="close-sheet"></div>'+
@@ -1749,6 +1798,7 @@ function closeSheet(){
   el.classList.remove('open');
   el.innerHTML='';
   unlockScroll();
+  popSheetHist();
 }
 function lockScroll(){
   var b=document.body;
@@ -1869,6 +1919,28 @@ function rxToggle(text,chip){
     parts.splice(nChips,0,chip);   /* 빠른 선택 항목은 앞쪽에 모아요 */
   }
   return parts.join(', ');
+}
+
+/* 오늘 이후 날짜에 새 기록을 남기려 할 때는 한 번 확인
+   (실수로 저장하면 팩 자동 개봉·재료 관찰 시작까지 이어지기 때문) */
+function openLogOrConfirm(date){
+  if(!isDate(date)) return;
+  var t=todayISO();
+  if(date<=t||state.logs[date]){ openLogSheet(date); return; }
+  var n=diffDays(t,date);
+  openSheet({
+    title:'아직 오지 않은 날이에요',
+    body:'<p class="sheet-note"><b>'+mdLong(date)+' ('+dowOf(date)+')</b>은 '+(n===1?'내일':n+'일 뒤')+'이에요. 그래도 먹인 기록을 남길까요?</p>'+
+      '<p class="sheet-note">기록하면 연결된 팩이 그 날짜로 개봉 처리되고, 새 재료는 관찰이 시작돼요.</p>'+
+      '<div class="sheet-actions">'+
+        '<button type="button" class="btn btn-primary" data-act="go-today-log">오늘 기록하기</button>'+
+        '<button type="button" class="btn btn-ghost" id="futureYes">'+mdShort(date)+'에 기록</button>'+
+      '</div>'+
+      '<div class="sheet-actions" style="margin-top:8px"><button type="button" class="btn btn-ghost btn-block" data-act="close-sheet">취소</button></div>',
+    onMount:function(root){
+      root.querySelector('#futureYes').addEventListener('click', function(){ closeSheet(); openLogSheet(date); });
+    }
+  });
 }
 
 function openLogSheet(date){
@@ -2924,7 +2996,12 @@ function deleteEntry(id){
       var moved=0;
       if(doPull){
         state.entries.forEach(function(x){
-          if(x.start>e.end){ x.start=addDays(x.start,-days); x.end=addDays(x.end,-days); moved++; }
+          if(x.start>e.end){
+            var from=x.start;
+            x.start=addDays(x.start,-days); x.end=addDays(x.end,-days);
+            shiftDailyGrams(x,from,-days);      /* 날짜별 용량도 함께 당김 */
+            moved++;
+          }
         });
         /* 일정을 당긴 만큼 그 구간의 먹인 기록도 함께 이동 */
         if(days) remapLogs(function(k){ return k>e.end?addDays(k,-days):k; });
@@ -3668,8 +3745,13 @@ document.addEventListener('click', function(ev){
       state.ui.calMonth=shiftMonth(state.ui.calMonth||monthKey(state.ui.sel||todayISO()), Number(el.getAttribute('data-n')));
       saveUi(true); render();
       break;
-    case 'log': openLogSheet(date); break;
+    case 'log': openLogOrConfirm(date); break;
     case 'log-del': deleteLog(date); break;
+    case 'go-today-log':
+      closeSheet();
+      selectDate(todayISO());
+      openLogSheet(todayISO());
+      break;
     case 'entry-new': openEntrySheet(null, isDate(date)?date:state.ui.sel); break;
     case 'plan-link':
       if(isDate(date)){
