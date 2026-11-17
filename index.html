@@ -102,6 +102,38 @@ button{font-family:inherit}
 .logbox-skip .logbox-amt{color:#8F8274}
 .logbox-grams{font-size:12px;font-weight:700;color:#9A8271}
 .logbox-memo{margin:6px 0 0;font-size:12.5px;color:#8A7466;white-space:pre-wrap;word-break:break-word}
+/* ── 2식(오전·오후) 기록 박스 ── */
+.logbox-rows{display:flex;flex-direction:column}
+.logbox-row+.logbox-row{margin-top:9px;padding-top:9px;border-top:1px dashed #EFD9C8}
+.logbox-rowtop{display:flex;align-items:center;gap:7px;min-width:0}
+.logbox-slot{flex:0 0 auto;font-size:10.5px;font-weight:800;color:#A9755A;background:#FBE9DA;border-radius:7px;padding:2px 7px;letter-spacing:-.01em}
+.logbox-empty{font-size:12px;font-weight:700;color:#B9AB9D}
+.logbox-row .logbox-amt{font-size:13px}
+.logbox-row .logbox-memo{margin-top:4px;padding-left:2px}
+/* ── 먹인 기록 시트: 오전/오후 탭 ── */
+.slottabs{display:flex;gap:7px;margin:2px 0 14px}
+.slottabs button{flex:1 1 0;min-width:0;border:1px solid #F2E0D2;background:#FFFDF9;border-radius:14px;padding:9px 6px;min-height:52px;
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;-webkit-appearance:none}
+.slottabs button .st-l{font-size:13px;font-weight:800;color:#7C6E60;letter-spacing:-.01em;white-space:nowrap}
+.slottabs button .st-l em{font-style:normal;font-size:10px;font-weight:700;color:#BE9F8D}
+.slottabs button .st-s{font-size:10.5px;font-weight:700;color:#B6A697;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slottabs button.on{background:#FCE8DC;border-color:#F5C9B4;box-shadow:0 2px 6px rgba(200,130,100,.12)}
+.slottabs button.on .st-l{color:#B85B41}
+.slottabs button.on .st-l em{color:#C08A70}
+.slottabs button.on .st-s{color:#C08A70}
+.slotclear{margin-top:6px}
+/* ── 식단 시트: 하루 끼니 · 연결할 재고 팩 ── */
+.seg#mealSeg button{font-size:12px}
+.packpick{display:flex;flex-direction:column;gap:6px;margin:0 0 14px;max-height:216px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.packchip{display:flex;align-items:center;gap:9px;border:1px solid #F2E3D5;background:#FFFCF7;border-radius:13px;padding:10px 11px;
+  font-size:12.5px;font-weight:700;color:#6F6357;cursor:pointer;line-height:1.35}
+.packchip input{width:17px;height:17px;margin:0;flex:0 0 auto;accent-color:#E9745B}
+.packchip.on{background:#FDF2E9;border-color:#F7D9C8;color:#8A4B33}
+.packchip .pk-sub{margin-left:auto;font-size:10.5px;font-weight:800;color:#A89A8B;white-space:nowrap;flex:0 0 auto}
+.packchip.expected .pk-sub{color:#C08A40}
+.linkbadge{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:800;color:#8A5B3F;background:#FBEEE0;
+  border:1px solid #F2DDC9;border-radius:999px;padding:4px 9px;cursor:pointer;letter-spacing:-.01em;-webkit-appearance:none}
+.item-links{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 
 /* ── badges ── */
 .badge{font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;white-space:nowrap;letter-spacing:-.01em}
@@ -185,10 +217,12 @@ details[open] .chev{transform:rotate(180deg)}
 .cal-cell.sel{background:linear-gradient(160deg,#F28A70,#E9745B);box-shadow:0 6px 14px rgba(233,116,91,.32)}
 .cal-cell.sel .cal-d{color:#fff}
 .cal-cell.sel .cal-l{color:#FFFFFF}
-.cal-cell.logged::after{content:"";position:absolute;bottom:3px;width:4px;height:4px;border-radius:50%;background:var(--peach-d)}
-.cal-cell.sel.logged::after{background:#FFE3D2}
-.cal-cell.skipped::after{background:#B9AC9E}
-.cal-cell.sel.skipped::after{background:#EADDD1}
+/* 기록 점: 1끼 = 점 1개, 오전·오후 2끼 = 점 2개 (58px 고정 격자는 그대로) */
+.cal-dots{position:absolute;left:0;right:0;bottom:3px;height:4px;display:flex;align-items:center;justify-content:center;gap:3px}
+.cal-dots i{display:block;width:4px;height:4px;border-radius:50%;background:var(--peach-d)}
+.cal-dots i.skip{background:#B9AC9E}
+.cal-cell.sel .cal-dots i{background:#FFE3D2}
+.cal-cell.sel .cal-dots i.skip{background:#EADDD1}
 .cal-legend{display:flex;gap:14px;justify-content:center;margin-top:11px;font-size:10.5px;color:#AC9D8E;font-weight:700}
 .cal-legend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;vertical-align:middle}
 
@@ -439,6 +473,8 @@ var bootCorrupt=false;
 var sheetScrollY=0;
 var AMOUNTS=[{v:'full',l:'완식',e:'😋'},{v:'half',l:'절반',e:'🙂'},{v:'little',l:'조금',e:'😕'},{v:'refuse',l:'거부',e:'🙈'},{v:'skip',l:'쉬어감',e:'⏸'}];
 var AMT_LABEL={full:'완식',half:'절반',little:'조금',refuse:'거부',skip:'쉬어감'};
+/* 하루 두 끼(오전·오후) 슬롯 */
+var SLOTS=[{v:'am',l:'오전',n:'1식'},{v:'pm',l:'오후',n:'2식'}];
 var ING_ST=[{v:'done',l:'통과'},{v:'testing',l:'관찰중'},{v:'caution',l:'주의'},{v:'todo',l:'미시도'}];
 var ING_LABEL={done:'통과',testing:'관찰중',caution:'주의',todo:'미시도'};
 var BRAND_ST=[{v:'active',l:'이용 중'},{v:'done',l:'이용 완료'},{v:'candidate',l:'후보'}];
@@ -464,6 +500,13 @@ function isDate(s){
 function addDays(s,n){ var d=parseISO(s); d.setDate(d.getDate()+n); return iso(d); }
 function diffDays(a,b){ return Math.round((parseISO(b)-parseISO(a))/86400000); }
 function mdShort(s){ var d=parseISO(s); return (d.getMonth()+1)+'/'+d.getDate(); }
+/* 같은 달이면 11/22~24 처럼 짧게 */
+function rangeShort(a,b){
+  var da=parseISO(a), db=parseISO(b);
+  if(!isNaN(da.getTime())&&!isNaN(db.getTime())&&da.getFullYear()===db.getFullYear()&&da.getMonth()===db.getMonth())
+    return mdShort(a)+'~'+db.getDate();
+  return mdShort(a)+'~'+mdShort(b);
+}
 function mdLong(s){ var d=parseISO(s); return (d.getMonth()+1)+'월 '+d.getDate()+'일'; }
 function dowOf(s){ return '일월화수목금토'.charAt(parseISO(s).getDay()); }
 function monthKey(s){ return String(s).slice(0,7); }
@@ -583,12 +626,22 @@ function normalize(s){
       if(!e||!isDate(e.start)||!isDate(e.end)||!e.menu) return;
       var a=e.start,b=e.end,tmp;
       if(b<a){ tmp=a; a=b; b=tmp; }
+      var pids=[];
+      if(Array.isArray(e.packIds)){
+        e.packIds.forEach(function(pid){
+          var s=String(pid==null?'':pid);
+          if(s&&pids.indexOf(s)<0) pids.push(s);
+        });
+      }
+      if(!pids.length&&e.packId) pids.push(String(e.packId));   /* 기존 단일 packId 자동 마이그레이션 */
       out.entries.push({
         id:e.id?String(e.id):uid('e'), start:a, end:b, menu:String(e.menu),
         brand:e.brand?String(e.brand):'',
         short:e.short?String(e.short):String(e.menu).replace(/\s*(미음|죽)$/,'').slice(-3),
         grams:(e.grams==null||e.grams==='')?'':String(e.grams),
-        note:e.note?String(e.note):'', packId:e.packId||null
+        note:e.note?String(e.note):'',
+        mealsPerDay:(Number(e.mealsPerDay)===2?2:1),
+        packId:(pids[0]||null), packIds:pids
       });
     });
   } else {
@@ -600,13 +653,8 @@ function normalize(s){
     Object.keys(s.logs).forEach(function(k){
       var v=s.logs[k];
       if(!isDate(k)||!v||typeof v!=='object') return;
-      out.logs[k]={
-        amount:AMT_LABEL[v.amount]?v.amount:'full',
-        grams:(v.grams==null||v.grams==='')?'':String(v.grams),
-        reaction:v.reaction?String(v.reaction):'',
-        shifted:v.shifted===true,
-        at:v.at||null
-      };
+      var n=normLog(v);   /* 기존 1식 기록({amount,...})도 오전 슬롯 기록으로 그대로 읽힘 */
+      if(n) out.logs[k]=n;
     });
   }
   if(Array.isArray(s.stock)){
@@ -741,9 +789,65 @@ function findStock(id){
 function sumQty(list){
   return list.reduce(function(a,s){ return a+s.qty; },0);
 }
+
+/* ───────── 기록 슬롯(1식/2식) 도우미 ─────────
+   기존 1식 기록 {amount,grams,reaction,shifted,at} 은 '오전' 슬롯 기록으로 그대로 읽힙니다.
+   새 기록은 {am:{...}, pm:{...}, shifted, at} 형태로 저장됩니다. */
+function slotObj(v){
+  if(!v||typeof v!=='object') return null;
+  return {
+    amount:AMT_LABEL[v.amount]?v.amount:'full',
+    grams:(v.grams==null||v.grams==='')?'':String(v.grams),
+    reaction:v.reaction?String(v.reaction):'',
+    at:v.at||null
+  };
+}
+function normLog(v){
+  if(!v||typeof v!=='object') return null;
+  var two=(Object.prototype.hasOwnProperty.call(v,'am')||Object.prototype.hasOwnProperty.call(v,'pm'));
+  var am=two?slotObj(v.am):slotObj(v);
+  var pm=two?slotObj(v.pm):null;
+  if(!am&&!pm) return null;
+  return {am:am, pm:pm, shifted:v.shifted===true, at:v.at||(am&&am.at)||(pm&&pm.at)||null};
+}
+/* 저장된 기록 → [{key:'am'|'pm', slot:{...}}] */
+function logSlots(log){
+  var n=normLog(log), out=[];
+  if(!n) return out;
+  if(n.am) out.push({key:'am',slot:n.am});
+  if(n.pm) out.push({key:'pm',slot:n.pm});
+  return out;
+}
+function logAllSkip(log){
+  var s=logSlots(log);
+  if(!s.length) return false;
+  return s.every(function(x){ return x.slot.amount==='skip'; });
+}
+function logHasEaten(log){
+  return logSlots(log).some(function(x){ return x.slot.amount!=='skip'; });
+}
+function slotLabel(k){ return k==='pm'?'오후':'오전'; }
+function mealsPerDayOf(e){ return (e&&Number(e.mealsPerDay)===2)?2:1; }
+function packIdsOf(e){
+  if(!e) return [];
+  var ids=Array.isArray(e.packIds)?e.packIds.map(function(x){ return x==null?'':String(x); }).filter(Boolean):[];
+  if(!ids.length&&e.packId) ids=[String(e.packId)];
+  return ids;
+}
+function packsOf(e){
+  return packIdsOf(e).map(findStock).filter(Boolean);
+}
+function packPillText(e){
+  var packs=packsOf(e);
+  if(!packs.length) return '';
+  return packs[0].name+(packs.length>1?' 외 '+(packs.length-1)+'팩':'');
+}
+
 function cloneEntry(e){
+  var pids=packIdsOf(e);
   return {id:e.id, start:e.start, end:e.end, menu:e.menu, brand:e.brand||'',
-    short:e.short||'', grams:(e.grams==null?'':String(e.grams)), note:e.note||'', packId:e.packId||null};
+    short:e.short||'', grams:(e.grams==null?'':String(e.grams)), note:e.note||'',
+    mealsPerDay:mealsPerDayOf(e), packId:(pids[0]||null), packIds:pids};
 }
 /* 저장된 먹인 기록(state.logs)의 날짜 키를 일정과 함께 이동.
    - mapFn이 같은 날짜를 돌려주면 그대로
@@ -894,16 +998,39 @@ function renderPrinciples(){
   }
 }
 
-function logBoxHTML(log){
-  if(!log) return '';
-  var a=AMT_LABEL[log.amount]||'기록';
-  var skip=(log.amount==='skip');
-  return '<div class="logbox'+(skip?' logbox-skip':'')+'">'+
-    '<div class="logbox-top"><span class="logbox-amt">'+a+'</span>'+
-      (!skip&&log.grams?'<span class="logbox-grams">'+esc(log.grams)+'g</span>':'')+
-    '</div>'+
-    (log.reaction?'<p class="logbox-memo">'+esc(log.reaction)+'</p>':'')+
-  '</div>';
+function logBoxHTML(log,e){
+  var slots=logSlots(log);
+  if(!slots.length) return '';
+  var two=(mealsPerDayOf(e)===2)||slots.length>1;
+  /* 1식만 기록된 날은 예전처럼 깔끔하게 한 줄 */
+  if(!two){
+    var one=slots[0].slot, skip1=(one.amount==='skip');
+    return '<div class="logbox'+(skip1?' logbox-skip':'')+'">'+
+      '<div class="logbox-top"><span class="logbox-amt">'+(AMT_LABEL[one.amount]||'기록')+'</span>'+
+        (!skip1&&one.grams?'<span class="logbox-grams">'+esc(one.grams)+'g</span>':'')+
+      '</div>'+
+      (one.reaction?'<p class="logbox-memo">'+esc(one.reaction)+'</p>':'')+
+    '</div>';
+  }
+  var by={};
+  slots.forEach(function(x){ by[x.key]=x.slot; });
+  var rows=['am','pm'].map(function(k){
+    var s=by[k];
+    if(!s){
+      return '<div class="logbox-row"><div class="logbox-rowtop">'+
+        '<span class="logbox-slot">'+slotLabel(k)+'</span>'+
+        '<span class="logbox-empty">아직 기록 없음</span></div></div>';
+    }
+    var skip=(s.amount==='skip');
+    return '<div class="logbox-row"><div class="logbox-rowtop">'+
+        '<span class="logbox-slot">'+slotLabel(k)+'</span>'+
+        '<span class="logbox-amt">'+(AMT_LABEL[s.amount]||'기록')+'</span>'+
+        (!skip&&s.grams?'<span class="logbox-grams">'+esc(s.grams)+'g</span>':'')+
+      '</div>'+
+      (s.reaction?'<p class="logbox-memo">'+esc(s.reaction)+'</p>':'')+
+    '</div>';
+  }).join('');
+  return '<div class="logbox'+(logAllSkip(log)?' logbox-skip':'')+'"><div class="logbox-rows">'+rows+'</div></div>';
 }
 
 function renderPlan(){
@@ -923,7 +1050,7 @@ function renderPlan(){
   '</div>';
 
   var badge;
-  if(log&&log.amount==='skip') badge='<span class="badge badge-skip">쉬어감</span>';
+  if(log&&logAllSkip(log)) badge='<span class="badge badge-skip">쉬어감</span>';
   else if(log) badge='<span class="badge badge-done">기록 완료</span>';
   else if(sel<t) badge='<span class="badge badge-muted">지난 날</span>';
   else if(isToday) badge='<span class="badge badge-peach">오늘</span>';
@@ -933,9 +1060,12 @@ function renderPlan(){
   if(e){
     var total=diffDays(e.start,e.end)+1;
     var idx=diffDays(e.start,sel)+1;
+    var packTxt=packPillText(e);
     body='<div class="hero-kicker">'+esc(e.brand||'이유식')+(total>1?' · '+idx+'/'+total+'일째':'')+'</div>'+
       '<h2 class="hero-menu">'+esc(e.menu)+'</h2>'+
-      '<div class="hero-meta"><span class="meta-pill">'+esc(e.grams)+'g</span><span class="meta-pill">하루 1회</span></div>'+
+      '<div class="hero-meta"><span class="meta-pill">'+esc(e.grams)+'g</span>'+
+        '<span class="meta-pill">'+(mealsPerDayOf(e)===2?'하루 2회 · 오전·오후':'하루 1회')+'</span>'+
+        (packTxt?'<span class="meta-pill">🔗 '+esc(packTxt)+'</span>':'')+'</div>'+
       (e.note?'<p class="hero-note">'+esc(e.note)+'</p>':'');
   } else {
     body='<h2 class="hero-menu" style="font-size:17px;margin-top:18px;color:#75705F">이날은 예정된 이유식이 없어요</h2>';
@@ -949,7 +1079,7 @@ function renderPlan(){
 
   $('#heroMount').innerHTML='<div class="hero">'+
     '<div class="hero-top">'+dateNav+badge+'</div>'+
-    body+logBoxHTML(log)+actions+
+    body+logBoxHTML(log,e)+actions+
   '</div>';
 
   var mode=(state.ui.mode==='list')?'list':'cal';
@@ -962,17 +1092,25 @@ function renderPlan(){
 function cellHTML(dayNum, dateStr, out, t, sel){
   var e=entryForDate(dateStr);
   var log=state.logs[dateStr];
+  var slots=logSlots(log);
   var cls='cal-cell';
   if(out) cls+=' out';
   if(e){ cls+=' has'; if(dateStr>t) cls+=' future'; }
-  if(log) cls+=' logged';
-  if(log&&log.amount==='skip') cls+=' skipped';
+  if(slots.length) cls+=' logged';
+  if(slots.length&&logAllSkip(log)) cls+=' skipped';
   if(dateStr===t) cls+=' today';
   if(dateStr===sel) cls+=' sel';
   var label=e?(e.short||''):'';
-  return '<button class="'+cls+'" data-act="sel-date" data-date="'+dateStr+'" aria-label="'+mdLong(dateStr)+'">'+
+  var dots='';
+  if(slots.length){
+    dots='<span class="cal-dots" aria-hidden="true">'+slots.map(function(x){
+      return '<i'+(x.slot.amount==='skip'?' class="skip"':'')+'></i>';
+    }).join('')+'</span>';
+  }
+  var recTxt=slots.length===2?' 기록 2끼':(slots.length?' 기록 1끼':'');
+  return '<button class="'+cls+'" data-act="sel-date" data-date="'+dateStr+'" aria-label="'+mdLong(dateStr)+recTxt+'">'+
     '<span class="cal-d">'+dayNum+'</span>'+
-    '<span class="cal-l">'+(label?esc(label):'&nbsp;')+'</span>'+
+    '<span class="cal-l">'+(label?esc(label):'&nbsp;')+'</span>'+dots+
   '</button>';
 }
 
@@ -1012,6 +1150,7 @@ function calendarHTML(){
       '<span><i style="background:#F28A70"></i>기록 완료</span>'+
       '<span><i style="background:#B9AC9E"></i>쉬어감</span>'+
     '</div>'+
+    '<div class="cal-legend" style="margin-top:3px;color:#C6B8A9;font-size:10px">점 2개 = 오전·오후 두 끼 기록</div>'+
   '</div>';
 }
 
@@ -1032,13 +1171,12 @@ function listHTML(){
       var active=(sel>=e.start&&sel<=e.end);
       var skips=0;
       for(var d=e.start; d<=e.end; d=addDays(d,1)){
-        var lg=state.logs[d];
-        if(lg&&lg.amount==='skip') skips++;
+        if(logAllSkip(state.logs[d])) skips++;
       }
       return '<div class="row'+(active?' row-active':'')+'" data-act="sel-date" data-date="'+(active?sel:e.start)+'">'+
         '<div class="row-main">'+
           '<div class="row-title">'+esc(e.menu)+'</div>'+
-          '<div class="row-sub">'+mdShort(e.start)+' ~ '+mdShort(e.end)+' · '+days+'일 · '+esc(e.grams)+'g'+(skips?' · 쉬어감 '+skips+'일':'')+'</div>'+
+          '<div class="row-sub">'+mdShort(e.start)+' ~ '+mdShort(e.end)+' · '+days+'일 · '+esc(e.grams)+'g'+(mealsPerDayOf(e)===2?' · 하루 2회':'')+(packsOf(e).length?' · 🔗 연결 '+packsOf(e).length+'팩':'')+(skips?' · 쉬어감 '+skips+'일':'')+'</div>'+
           (e.note?'<div class="row-sub muted">'+esc(e.note)+'</div>':'')+
         '</div>'+
         '<div class="row-side">'+badge+'<button class="mini" data-act="entry-edit" data-id="'+e.id+'">수정</button></div>'+
@@ -1046,22 +1184,33 @@ function listHTML(){
     }).join('');
   }
   var skipDays=Object.keys(state.logs).filter(function(k){
-    var v=state.logs[k]; return !!(v&&v.amount==='skip');
+    return logAllSkip(state.logs[k]);
   }).sort().reverse();
   if(skipDays.length){
     html+='<div class="sec-head"><span class="sec-title">쉬어간 날</span><span class="sec-sub">'+skipDays.length+'일</span></div>';
     html+=skipDays.map(function(d){
       var lg=state.logs[d]||{};
+      var memo=logSlots(lg).map(function(x){ return x.slot.reaction||''; }).filter(Boolean).join(' / ');
       return '<div class="row row-skip" data-act="sel-date" data-date="'+d+'">'+
         '<div class="row-main">'+
           '<div class="row-title">'+mdLong(d)+' '+dowOf(d)+' <span class="badge badge-skip">쉬어감</span></div>'+
-          '<div class="row-sub muted">'+(lg.reaction?esc(lg.reaction):'이날은 이유식을 쉬었어요')+(lg.shifted?' · 이후 일정 하루 미룸':'')+'</div>'+
+          '<div class="row-sub muted">'+(memo?esc(memo):'이날은 이유식을 쉬었어요')+(lg.shifted?' · 이후 일정 하루 미룸':'')+'</div>'+
         '</div>'+
       '</div>';
     }).join('');
   }
   html+='<button class="btn btn-ghost btn-block" style="margin-top:6px" data-act="entry-new">＋ 새 식단 일정</button>';
   return html;
+}
+
+/* 이 재고 팩을 쓰는 식단들 (🔗 11/22~24 한우감자) */
+function stockLinkBadges(s){
+  var out=[];
+  state.entries.forEach(function(e){
+    if(packIdsOf(e).indexOf(s.id)<0) return;
+    out.push('<button type="button" class="linkbadge" data-act="plan-link" data-date="'+e.start+'">🔗 '+rangeShort(e.start,e.end)+' '+esc(e.short||e.menu)+'</button>');
+  });
+  return out.length?'<div class="item-links">'+out.join('')+'</div>':'';
 }
 
 function itemHTML(s){
@@ -1091,12 +1240,13 @@ function itemHTML(s){
   }
   tools+='<button class="mini" data-act="stock-edit" data-id="'+s.id+'">수정</button>';
 
+  var links=stockLinkBadges(s);
   return '<div class="item">'+
     '<div class="item-top">'+
       '<div style="flex:1;min-width:0">'+
         '<div class="item-name">'+esc(s.name)+'<span class="tag">'+s.size+'g</span></div>'+
         '<div class="item-sub">'+(s.brand?esc(s.brand)+' · ':'')+sub+'</div>'+
-        expChip+
+        expChip+links+
         (s.note?'<div class="item-note">'+esc(s.note)+'</div>':'')+
       '</div>'+
       '<div class="stepper">'+
@@ -1342,67 +1492,226 @@ function unshiftScheduleFrom(date){
 
 function openLogSheet(date){
   var e=entryForDate(date);
-  var log=state.logs[date];
-  var amt=log?log.amount:'full';
+  var prev=normLog(state.logs[date]);
+  var mpd=mealsPerDayOf(e);
   var planGrams=e?String(e.grams||'').split('~')[0]:'';
-  var grams=log?log.grams:planGrams;
-  var shiftedAlready=!!(log&&log.shifted);
+  var shiftedAlready=!!(prev&&prev.shifted);
+  var draft={am:null,pm:null};
+  var touched={am:false,pm:false};
+  if(prev&&prev.am) draft.am={amount:prev.am.amount,grams:prev.am.grams,reaction:prev.am.reaction,at:prev.am.at,saved:true};
+  if(prev&&prev.pm) draft.pm={amount:prev.pm.amount,grams:prev.pm.grams,reaction:prev.pm.reaction,at:prev.pm.at,saved:true};
+  /* 처음 열 때의 탭: 2식이면 아직 기록 없는 끼니부터 */
+  var cur='am';
+  if(mpd===2) cur=!draft.am?'am':(!draft.pm?'pm':'am');
+  var openSlot=cur, switched=false;
+  var shiftChoice=!shiftedAlready;
+  var unshiftChoice=false;
+
+  function slotStateText(k){
+    var d=draft[k];
+    if(!d) return '기록 없음';
+    var skip=(d.amount==='skip');
+    return (AMT_LABEL[d.amount]||'기록')+(!skip&&d.grams?' '+d.grams+'g':'');
+  }
+  function tabsHTML(){
+    return SLOTS.map(function(s){
+      return '<button type="button" data-slot="'+s.v+'" class="'+(cur===s.v?'on':'')+'">'+
+        '<span class="st-l">'+s.l+' <em>('+s.n+')</em></span>'+
+        '<span class="st-s">'+esc(slotStateText(s.v))+'</span></button>';
+    }).join('');
+  }
+  function bodyHTML(){
+    var d=draft[cur];
+    var amt=d?d.amount:'full';
+    var grams=d?d.grams:planGrams;
+    var rx=d?d.reaction:'';
+    var unshiftWrap='';
+    if(shiftedAlready){
+      unshiftWrap='<div class="hidden" id="unshiftExtra">'+
+        '<label class="check" style="margin:10px 0 6px"><input type="checkbox" id="fUnshift"'+(unshiftChoice?' checked':'')+'> 미뤄 둔 이후 일정을 하루 앞으로 되돌리기</label>'+
+        '<p class="sheet-note" style="margin:0 0 4px">이 날을 쉬어감으로 미뤘던 일정이 하루 당겨져요. 체크하지 않으면 일정은 그대로 둬요.</p>'+
+      '</div>';
+    }
+    return '<div class="seg" id="amtSeg">'+AMOUNTS.map(function(a){
+        return '<button type="button" data-amt="'+a.v+'" data-v="'+a.v+'" class="'+(a.v===amt?'on':'')+'">'+a.e+' '+a.l+'</button>';
+      }).join('')+'</div>'+
+      '<div class="hidden" id="skipExtra">'+
+        '<p class="sheet-note" style="margin:10px 0 10px">아기 컨디션·외출 등으로 이 끼를 못 먹였으면 <b>쉬어감</b>. 섭취량은 0g으로 기록돼요.</p>'+
+        '<label class="check" style="margin:0 0 8px"><input type="checkbox" id="fShift"'+(!shiftedAlready&&shiftChoice?' checked':'')+(shiftedAlready?' disabled':'')+'> '+
+          (shiftedAlready?'이미 하루 미뤘어요 (다시 미루지 않아요)':'이후 일정 하루씩 뒤로 미루기')+'</label>'+
+        '<p class="sheet-note" style="margin:0 0 4px">'+
+          (shiftedAlready?'이 날짜는 이미 한 번 미뤘어요. 같은 일정이 두 번 밀리지 않도록 미루기는 꺼 두었어요.'
+            :'오전·오후 <b>모두</b> 쉬어감일 때만 이후 일정이 하루 밀려요. 한 끼만 건너뛰면 일정은 그대로예요.')+'</p>'+
+      '</div>'+unshiftWrap+
+      '<label class="field" style="margin-top:16px">실제로 먹은 양 (g)<input id="fGrams" type="number" inputmode="numeric" step="1" min="0" max="400" data-def="'+esc(planGrams)+'" data-shifted="'+(shiftedAlready?'1':'0')+'" value="'+esc(grams)+'"></label>'+
+      '<label class="field">반응 · 메모<textarea id="fReaction" rows="3" placeholder="예: 끝까지 잘 먹음. 입가 발진 없음">'+esc(rx)+'</textarea></label>'+
+      (d?'<button type="button" class="btn btn-ghost btn-block slotclear" id="slotClear">이 끼니('+slotLabel(cur)+') 기록 지우기</button>':'');
+  }
+
   var body='<form id="logForm" novalidate>'+
     '<p class="sheet-note">'+mdLong(date)+' ('+dowOf(date)+') · '+esc(e?e.menu:'직접 기록')+'</p>'+
-    '<div class="seg" id="amtSeg">'+AMOUNTS.map(function(a){
-      return '<button type="button" data-amt="'+a.v+'" data-v="'+a.v+'" class="'+(a.v===amt?'on':'')+'">'+a.e+' '+a.l+'</button>';
-    }).join('')+'</div>'+
-    '<div class="hidden" id="skipExtra">'+
-      '<p class="sheet-note" style="margin:10px 0 10px">아기 컨디션·외출 등으로 못 먹였으면 <b>쉬어감</b>. 섭취량은 0g으로 기록돼요.</p>'+
-      '<label class="check" style="margin:0 0 8px"><input type="checkbox" id="fShift"'+(!shiftedAlready?' checked':'')+(shiftedAlready?' disabled':'')+'> '+
-        (shiftedAlready?'이미 하루 미뤘어요 (다시 미루지 않아요)':'이후 일정 하루씩 뒤로 미루기')+'</label>'+
-      '<p class="sheet-note" style="margin:0 0 4px">'+
-        (shiftedAlready?'이 날짜는 이미 한 번 미뤘어요. 같은 일정이 두 번 밀리지 않도록 미루기는 꺼 두었어요.'
-          :'진행 중인 식단은 이미 먹인 날은 그대로 두고 마지막 날만 하루 늘어나요. 그 뒤 식단은 하루씩 밀려요.')+
-      '</p>'+
-    '</div>'+
-    '<div class="hidden" id="unshiftExtra">'+
-      '<label class="check" style="margin:10px 0 6px"><input type="checkbox" id="fUnshift"> 미뤄 둔 이후 일정을 하루 앞으로 되돌리기</label>'+
-      '<p class="sheet-note" style="margin:0 0 4px">이 날을 쉬어감으로 미뤘던 일정이 하루 당겨져요. 체크하지 않으면 일정은 그대로 둬요.</p>'+
-    '</div>'+
-    '<label class="field" style="margin-top:16px">실제로 먹은 양 (g)<input id="fGrams" type="number" inputmode="numeric" step="1" min="0" max="400" data-def="'+esc(planGrams)+'" data-shifted="'+(shiftedAlready?'1':'0')+'" value="'+esc(grams)+'"></label>'+
-    '<label class="field">반응 · 메모<textarea id="fReaction" rows="3" placeholder="예: 끝까지 잘 먹음. 입가 발진 없음">'+esc(log?log.reaction:'')+'</textarea></label>'+
+    '<div class="slottabs" id="slotTabs">'+tabsHTML()+'</div>'+
+    '<div id="slotBody">'+bodyHTML()+'</div>'+
     '<div class="sheet-actions">'+
       '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
       '<button type="submit" class="btn btn-primary">저장</button>'+
     '</div>'+
-    (log?'<button type="button" class="btn btn-danger btn-block" style="margin-top:8px" data-act="log-del" data-date="'+date+'">이 기록 지우기</button>':'')+
+    (prev?'<button type="button" class="btn btn-danger btn-block" style="margin-top:8px" data-act="log-del" data-date="'+date+'">이 날 기록 모두 지우기</button>':'')+
   '</form>';
+
   openSheet({title:'먹인 기록', body:body, onMount:function(root){
+    var tabs=root.querySelector('#slotTabs');
+    var bodyEl=root.querySelector('#slotBody');
+    function capture(){
+      var on=bodyEl.querySelector('#amtSeg .on');
+      if(!on) return;
+      var amt=on.getAttribute('data-amt')||'full';
+      var gEl=bodyEl.querySelector('#fGrams');
+      var rEl=bodyEl.querySelector('#fReaction');
+      var g=(gEl?gEl.value:'').trim();
+      var rx=(rEl?rEl.value:'').trim();
+      draft[cur]={amount:AMT_LABEL[amt]?amt:'full', grams:(amt==='skip'?'0':g), reaction:rx,
+        at:(draft[cur]&&draft[cur].at)||null, saved:!!(draft[cur]&&draft[cur].saved)};
+      var sc=bodyEl.querySelector('#fShift');
+      if(sc&&!sc.disabled) shiftChoice=!!sc.checked;
+      var uc=bodyEl.querySelector('#fUnshift');
+      if(uc) unshiftChoice=!!uc.checked;
+    }
+    function paint(){
+      tabs.innerHTML=tabsHTML();
+      bodyEl.innerHTML=bodyHTML();
+      syncAmtSkip(root);
+    }
+    bodyEl.addEventListener('input', function(){ touched[cur]=true; });
+    bodyEl.addEventListener('click', function(ev){
+      var cl=ev.target.closest?ev.target.closest('#slotClear'):null;
+      if(cl){
+        draft[cur]=null; touched[cur]=false;
+        paint();
+        toast(slotLabel(cur)+' 기록을 지웠어요 · 저장을 눌러 반영해요');
+        return;
+      }
+      if(ev.target.closest&&ev.target.closest('#amtSeg')) touched[cur]=true;
+    });
+    tabs.addEventListener('click', function(ev){
+      var b=ev.target.closest?ev.target.closest('[data-slot]'):null;
+      if(!b) return;
+      var k=b.getAttribute('data-slot');
+      if(k===cur) return;
+      capture();
+      cur=k;
+      switched=true;
+      paint();
+    });
     syncAmtSkip(root);
     root.querySelector('#logForm').addEventListener('submit', function(ev){
       ev.preventDefault();
-      var on=root.querySelector('#amtSeg .on');
-      var amt=(on?on.getAttribute('data-amt'):'full')||'full';
-      var g=(root.querySelector('#fGrams').value||'').trim();
-      if(amt==='skip') g='0';
-      var shiftBox=root.querySelector('#fShift');
-      /* 이미 미룬 날짜는 같은 일정이 두 번 밀리지 않도록 다시 미루지 않음 */
-      var doShift=!!(amt==='skip'&&!shiftedAlready&&shiftBox&&shiftBox.checked&&!shiftBox.disabled);
-      var unBox=root.querySelector('#fUnshift');
-      var doUnshift=!!(shiftedAlready&&amt!=='skip'&&unBox&&unBox.checked&&!unBox.disabled);
-      var prevShifted=!!(log&&log.shifted);
-      state.logs[date]={
-        amount:amt,
-        grams:g,
-        reaction:(root.querySelector('#fReaction').value||'').trim(),
-        at:new Date().toISOString(),
-        shifted:(amt==='skip'?(prevShifted||doShift):(prevShifted&&!doUnshift))
-      };
+      capture();
+      var now=new Date().toISOString();
+      function buildSlot(k){
+        var d=draft[k];
+        if(!d) return null;
+        /* 저장된 적도 없고 손대지도 않은 슬롯은 만들지 않음.
+           다만 시트를 열자마자 보이던 끼니는 그대로 저장을 누르면 예전처럼 기본값으로 기록 */
+        if(!d.saved&&!touched[k]&&!(k===openSlot&&!switched)) return null;
+        return {
+          amount:AMT_LABEL[d.amount]?d.amount:'full',
+          grams:(d.amount==='skip'?'0':(d.grams==null?'':String(d.grams))),
+          reaction:d.reaction?String(d.reaction):'',
+          at:d.at||now
+        };
+      }
+      var am=buildSlot('am'), pm=buildSlot('pm');
+      var prevHadEaten=logHasEaten(state.logs[date]);
+      if(!am&&!pm){
+        var had=!!state.logs[date];
+        if(had) delete state.logs[date];
+        var backDel=(had&&shiftedAlready)?unshiftScheduleFrom(date):0;
+        save(); closeSheet(); render();
+        toast(backDel?'기록을 지우고 일정 '+backDel+'개를 하루 당겼어요':(had?'이 날 기록을 지웠어요':'저장할 기록이 없어서 그대로 뒀어요'));
+        return;
+      }
+      var daySkipped=(function(){
+        var sl=[am,pm].filter(Boolean);
+        if(!sl.length) return false;
+        /* 2식은 오전·오후 둘 다 쉬어감일 때만 '하루 쉬어감'으로 보고 일정을 밀어요 */
+        if(mpd===2) return !!(am&&pm&&am.amount==='skip'&&pm.amount==='skip');
+        return sl.every(function(s){ return s.amount==='skip'; });
+      })();
+      var doShift=!!(daySkipped&&!shiftedAlready&&shiftChoice);
+      var doUnshift=!!(!daySkipped&&shiftedAlready&&unshiftChoice);
+      var rec={am:am, pm:pm, shifted:(daySkipped?(shiftedAlready||doShift):(shiftedAlready&&!doUnshift)), at:now};
+      state.logs[date]=rec;
       var moved=0, back=0;
       if(doShift) moved=shiftScheduleFrom(date);
       if(doUnshift) back=unshiftScheduleFrom(date);
+      var notes=[];
+      if(e){
+        var res=autoOpenLinkedPacks(e,date);
+        if(res&&res.opened.length) notes.push('🌱 '+res.opened.join(' · ')+' 개봉 표시');
+        else if(res&&res.first&&res.expected.length) notes.push('도착 예정 팩은 도착 처리하면 이어져요');
+      }
       save(); closeSheet(); render();
-      if(amt==='skip') toast(moved?'쉬어감으로 표시하고 일정 '+moved+'개를 하루 미뤘어요':(prevShifted?'쉬어감으로 표시했어요 (일정은 그대로)':'쉬어감으로 표시했어요'));
-      else if(back) toast('기록을 고치고 일정 '+back+'개를 하루 당겼어요');
-      else toast('기록을 저장했어요');
+      var baseMsg;
+      if(daySkipped) baseMsg=moved?('쉬어감으로 표시하고 일정 '+moved+'개를 하루 미뤘어요'):(shiftedAlready?'쉬어감으로 표시했어요 (일정은 그대로)':'쉬어감으로 표시했어요');
+      else if(back) baseMsg='기록을 고치고 일정 '+back+'개를 하루 당겼어요';
+      else baseMsg=(am&&pm)?'오전·오후 기록을 저장했어요':'기록을 저장했어요';
+      toast(notes.length?baseMsg+' · '+notes.join(' · '):baseMsg);
+      /* 마지막 계획일에 먹인 기록 → 연결된 팩 수량 차감 확인 */
+      if(e&&date===e.end&&!prevHadEaten&&logHasEaten(rec)){
+        var cand=consumeCandidate(e);
+        if(cand) askConsumePack(cand);
+      }
     });
   }});
+}
+
+/* 연결된 팩이 있는 식단의 '첫 먹인 기록'을 저장하면 그 팩을 기록 날짜로 자동 개봉.
+   도착 예정(expected) 팩은 건드리지 않고 안내만 해요. */
+function autoOpenLinkedPacks(e,date){
+  var packs=packsOf(e);
+  if(!packs.length) return null;
+  var first=null, d=e.start;
+  while(d<=e.end){
+    if(logHasEaten(state.logs[d])){ first=d; break; }
+    d=addDays(d,1);
+  }
+  var isFirst=(first===date);
+  var openedNames=[], expectedNames=[];
+  packs.forEach(function(s){
+    if(s.status==='expected'){ expectedNames.push(s.name); return; }
+    if(isFirst&&s.status==='arrived'&&!s.opened&&s.qty>0){ s.opened=date; openedNames.push(s.name); }
+  });
+  return {first:isFirst, opened:openedNames, expected:expectedNames};
+}
+/* 마지막 계획일에 수량을 줄일 팩: 개봉된 팩 우선, 그다음 도착해 있는 팩 */
+function consumeCandidate(e){
+  var packs=packsOf(e).filter(function(s){ return s.status==='arrived'&&s.qty>=1; });
+  if(!packs.length) return null;
+  var opened=packs.filter(function(s){ return !!s.opened; });
+  return opened.length?opened[0]:packs[0];
+}
+function askConsumePack(s){
+  var after=s.qty-1;
+  hideToast();
+  openSheet({
+    title:'재고 차감',
+    body:'<p class="sheet-note" style="font-weight:700;color:#BF5C42">이 식단의 연결된 팩을 다 먹었나요? 재고 수량을 1개 줄일까요?</p>'+
+      '<p class="sheet-note">'+esc(s.name)+' · '+s.qty+'팩 → <b>'+after+'팩</b>'+(after<=0?' (소진 완료)':'')+'</p>'+
+      '<p class="sheet-note">줄이지 않으면 재고는 그대로 두고 먹인 기록만 남겨요.</p>'+
+      '<div class="sheet-actions">'+
+        '<button type="button" class="btn btn-ghost" data-act="close-sheet">그대로 두기</button>'+
+        '<button type="button" class="btn btn-primary" id="consumeYes">1개 줄이기</button>'+
+      '</div>',
+    onMount:function(root){
+      root.querySelector('#consumeYes').addEventListener('click', function(){
+        s.qty=Math.max(0,s.qty-1);
+        if(s.qty<=0) s.opened='';
+        save(); closeSheet(); render();
+        toast(s.qty<=0?('재고 1팩 줄임 · '+s.name+' 소진 완료'):'재고를 1팩 줄였어요');
+      });
+    }
+  });
 }
 
 function openPrinciplesSheet(){
@@ -1465,6 +1774,30 @@ function openPrinciplesSheet(){
   }});
 }
 
+/* 식단 시트: 연결할 재고 팩 여러 개 고르기 (체크박스 칩) */
+function packPickHTML(e){
+  var chosen=packIdsOf(e);
+  if(!state.stock.length){
+    return '<p class="sheet-note" style="margin:0 0 14px">냉장·재고 탭에 팩을 먼저 추가하면 여기서 연결할 수 있어요.</p>';
+  }
+  var list=state.stock.slice().sort(function(a,b){
+    if(a.status!==b.status) return a.status==='arrived'?-1:1;
+    return String(a.expected||a.arrived||'').localeCompare(String(b.expected||b.arrived||''));
+  });
+  return '<div class="packpick" id="packPick">'+list.map(function(s){
+    var on=chosen.indexOf(s.id)>=0;
+    var sub;
+    if(s.status==='expected') sub='도착 예정'+(s.expected?' '+mdShort(s.expected):'');
+    else sub=(s.opened?'개봉 '+mdShort(s.opened):'냉장')+' · '+s.qty+'팩';
+    var used=state.entries.filter(function(x){ return (!e||x.id!==e.id)&&packIdsOf(x).indexOf(s.id)>=0; });
+    if(used.length) sub='사용 중 '+mdShort(used[0].start)+'~'+mdShort(used[0].end);
+    return '<label class="packchip'+(on?' on':'')+(s.status==='expected'?' expected':'')+'">'+
+      '<input type="checkbox" data-pack="'+esc(s.id)+'"'+(on?' checked':'')+'>'+
+      '<span>'+esc(s.name)+' <span style="color:#B3A597;font-weight:700">'+s.size+'g</span></span>'+
+      '<span class="pk-sub">'+esc(sub)+'</span></label>';
+  }).join('')+'</div>';
+}
+
 function openEntrySheet(id, presetDate){
   var e=id?findEntry(id):null;
   var today=todayISO();
@@ -1480,8 +1813,17 @@ function openEntrySheet(id, presetDate){
       '<label class="field">1회 양 (g)<input id="fGrams" type="text" inputmode="numeric" value="'+esc(e?e.grams:'')+'" placeholder="50 또는 60~70"></label>'+
       '<label class="field">브랜드<input id="fBrand" type="text" value="'+esc(e?e.brand:'')+'" placeholder="예: 루솔"></label>'+
     '</div>'+
+    '<div class="field" style="margin-bottom:12px">하루 끼니'+
+      '<div class="seg" id="mealSeg" style="margin-top:6px">'+
+        '<button type="button" data-mpd="1" data-v="full" class="'+(mealsPerDayOf(e)===1?'on':'')+'">1식</button>'+
+        '<button type="button" data-mpd="2" data-v="full" class="'+(mealsPerDayOf(e)===2?'on':'')+'">2식 (오전·오후)</button>'+
+      '</div>'+
+      '<p class="sheet-note" style="margin:6px 0 0" id="mpdHint">'+(mealsPerDayOf(e)===2?'오전·오후 두 끼를 따로 기록해요. 1회 양은 한 끼 기준이에요.':'하루 한 끼 기록이에요. 필요하면 기록할 때 오후 끼를 더할 수 있어요.')+'</p>'+
+    '</div>'+
     '<label class="field">캘린더 표시 (짧게)<input id="fShort" type="text" maxlength="6" value="'+esc(e?e.short:'')+'" placeholder="예: 한우감자"></label>'+
     '<label class="field">메모<textarea id="fNote" rows="2" placeholder="소분 방법, 관찰 포인트">'+esc(e?e.note:'')+'</textarea></label>'+
+    '<div class="field" style="margin-bottom:6px">연결할 재고 팩 <span style="font-weight:700;color:#B3A597">(여러 개 선택 가능)</span></div>'+
+    packPickHTML(e)+
     (e?'<label class="check hidden" id="followWrap" style="margin:0 0 4px"><input type="checkbox" id="fFollow"> <span id="followLabel">이후 일정도 같이 조정</span></label>'+
       '<p class="sheet-note hidden" id="followNote" style="margin:0 0 10px"></p>':'')+
     '<p class="sheet-note err hidden" id="entryErr"></p>'+
@@ -1497,6 +1839,25 @@ function openEntrySheet(id, presetDate){
     var fLabel=root.querySelector('#followLabel');
     var fNote=root.querySelector('#followNote');
     var fTouched=false;
+    /* 하루 끼니(1식/2식) */
+    var mpd=mealsPerDayOf(e);
+    var mealSeg=root.querySelector('#mealSeg');
+    if(mealSeg) mealSeg.addEventListener('click', function(ev){
+      var b=ev.target.closest?ev.target.closest('[data-mpd]'):null;
+      if(!b) return;
+      mpd=Number(b.getAttribute('data-mpd'))===2?2:1;
+      Array.prototype.forEach.call(mealSeg.children, function(c){ c.classList.toggle('on', c===b); });
+      var hint=root.querySelector('#mpdHint');
+      if(hint) hint.textContent=(mpd===2?'오전·오후 두 끼를 따로 기록해요. 1회 양은 한 끼 기준이에요.':'하루 한 끼 기록이에요. 필요하면 기록할 때 오후 끼를 더할 수 있어요.');
+    });
+    /* 연결할 재고 팩 여러 개 */
+    var packWrap=root.querySelector('#packPick');
+    if(packWrap) packWrap.addEventListener('change', function(ev){
+      var inp=ev.target;
+      if(!inp||!inp.getAttribute||!inp.getAttribute('data-pack')) return;
+      var lab=inp.closest?inp.closest('.packchip'):null;
+      if(lab) lab.classList.toggle('on', !!inp.checked);
+    });
     function laterList(){
       if(!e) return [];
       return state.entries.filter(function(x){ return x.id!==e.id&&x.start>e.end; });
@@ -1542,6 +1903,12 @@ function openEntrySheet(id, presetDate){
       if(!menu){ toast('메뉴 이름을 적어 주세요'); return; }
       if(!isDate(s)||!isDate(en)){ toast('날짜를 확인해 주세요'); return; }
       if(en<s){ var tmp=s; s=en; en=tmp; }
+      var pids=[];
+      if(packWrap){
+        Array.prototype.forEach.call(packWrap.querySelectorAll('input[data-pack]'), function(inp){
+          if(inp.checked) pids.push(inp.getAttribute('data-pack'));
+        });
+      }
       var rec={
         id:e?e.id:uid('e'),
         start:s, end:en, menu:menu,
@@ -1549,7 +1916,8 @@ function openEntrySheet(id, presetDate){
         short:((root.querySelector('#fShort').value||'').trim()||menu.replace(/\s*(미음|죽)$/,'').slice(-3)),
         grams:(root.querySelector('#fGrams').value||'').trim(),
         note:(root.querySelector('#fNote').value||'').trim(),
-        packId:e?e.packId:null
+        mealsPerDay:mpd,
+        packId:(pids[0]||null), packIds:pids
       };
       var oldEnd=e?e.end:'';
       var delta=e?diffDays(oldEnd,en):0;
@@ -2082,6 +2450,12 @@ function toast(msg){  var el=document.getElementById('toast');
   clearTimeout(toastTimer);
   toastTimer=setTimeout(function(){ el.classList.remove('on'); },2200);
 }
+/* 확인 시트를 띄우기 직전에 안내 토스트를 닫아 글자가 겹치지 않게 */
+function hideToast(){
+  clearTimeout(toastTimer);
+  var el=document.getElementById('toast');
+  if(el) el.classList.remove('on');
+}
 
 /* ═════════ ☁️ 실시간 가족 동기화 (Firebase Firestore) ═════════
    · 인터넷·CDN이 없거나 실패해도 이 앱은 localStorage만으로 100% 그대로 동작합니다.
@@ -2216,28 +2590,52 @@ function mergeListBy(baseArr,localArr,cloudArr){
   });
   return {list:out,conflicts:conflicts};
 }
-/* 날짜 키로 된 기록(logs) 병합 */
-function mergeMapBy(baseMap,localMap,cloudMap){
+/* 한 날짜·한 항목 병합 규칙: base(마지막 동기화 상태) 대비 한쪽만 바뀐 쪽을 쓰고,
+   둘 다 바뀌었으면 이 폰 기록을 살립니다. */
+function pickUnit(b,l,c){
+  var bj=b?jstr(b):null, lj=l?jstr(l):null, cj=c?jstr(c):null;
+  if(l&&c){
+    if(lj===cj) return {v:l};
+    if(lj===bj) return {v:c};
+    if(cj===bj) return {v:l};
+    return {v:l,conflict:true};
+  }
+  if(l){ return (b&&lj===bj)?{v:null}:{v:l}; }
+  if(c){ return (b&&cj===bj)?{v:null}:{v:c}; }
+  return {v:null};
+}
+function mergeFlag(bv,lv,cv){
+  var bj=jstr(bv), lj=jstr(lv), cj=jstr(cv);
+  if(lj===cj) return lv===true;
+  if(lj===bj) return cv===true;
+  return lv===true;
+}
+/* 날짜별 먹인 기록(logs) 병합: 오전/오후 슬롯을 따로 비교해서
+   한쪽 폰은 오전, 다른 폰은 오후를 기록한 경우에도 둘 다 살립니다. */
+function mergeLogsBy(baseMap,localMap,cloudMap){
   var b=baseMap||{}, l=localMap||{}, c=cloudMap||{}, keys=[];
-  Object.keys(l).forEach(function(k){ keys.push(k); });
+  Object.keys(l).forEach(function(k){ if(keys.indexOf(k)<0) keys.push(k); });
   Object.keys(c).forEach(function(k){ if(keys.indexOf(k)<0) keys.push(k); });
   keys.sort();
   var out={}, conflicts=0;
   keys.forEach(function(k){
-    var bi=b[k], li=l[k], ci=c[k];
-    var bj=bi?jstr(bi):null, lj=li?jstr(li):null, cj=ci?jstr(ci):null;
-    var pick=null;
-    if(li&&ci){
-      if(lj===cj) pick=li;
-      else if(lj===bj) pick=ci;
-      else if(cj===bj) pick=li;
-      else { pick=li; conflicts++; }
-    } else if(li){
-      if(!(bi&&lj===bj)) pick=li;
-    } else if(ci){
-      if(!(bi&&cj===bj)) pick=ci;
+    var bi=b[k]||null, li=l[k]||null, ci=c[k]||null;
+    if(!li||!ci){
+      var w=pickUnit(bi,li,ci);
+      if(w.v) out[k]=w.v;
+      if(w.conflict) conflicts++;
+      return;
     }
-    if(pick) out[k]=pick;
+    var bN=normLog(bi), lN=normLog(li), cN=normLog(ci);
+    if(!lN||!cN){ out[k]=li; return; }
+    var am=pickUnit(bN?bN.am:null,lN.am,cN.am);
+    var pm=pickUnit(bN?bN.pm:null,lN.pm,cN.pm);
+    if(am.conflict||pm.conflict) conflicts++;
+    if(!am.v&&!pm.v) return;                 /* 한쪽에서 지운 기록 → 지움 */
+    var at=null;
+    [am.v,pm.v].forEach(function(sv){ if(sv&&sv.at&&(!at||String(sv.at)>String(at))) at=sv.at; });
+    if(!at) at=(lN.at||cN.at||null);
+    out[k]={am:am.v, pm:pm.v, shifted:mergeFlag(bN?bN.shifted:null,lN.shifted,cN.shifted), at:at};
   });
   return {map:out,conflicts:conflicts};
 }
@@ -2251,12 +2649,12 @@ function mergeUnit(b,l,c){
 }
 /* base(없을 수 있음) · 이 폰 · 클라우드를 합쳐 하나의 기록으로 */
 function mergeStates(base,local,cloud){
-  var b=syncData(base), l=syncData(local), c=syncData(cloud);
+  var b=syncData(base?normalize(base):null), l=syncData(local), c=syncData(cloud);
   var e=mergeListBy(b.entries,l.entries,c.entries);
   var s=mergeListBy(b.stock,l.stock,c.stock);
   var g=mergeListBy(b.ingredients,l.ingredients,c.ingredients);
   var br=mergeListBy(b.brands,l.brands,c.brands);
-  var lg=mergeMapBy(b.logs,l.logs,c.logs);
+  var lg=mergeLogsBy(b.logs,l.logs,c.logs);
   var out={
     version:1,
     profile:mergeUnit(b.profile,l.profile,c.profile),
@@ -2732,6 +3130,13 @@ document.addEventListener('click', function(ev){
     case 'log': openLogSheet(date); break;
     case 'log-del': deleteLog(date); break;
     case 'entry-new': openEntrySheet(null, isDate(date)?date:state.ui.sel); break;
+    case 'plan-link':
+      if(isDate(date)){
+        state.ui.view='plan'; state.ui.sel=date; state.ui.calMonth=monthKey(date);
+        saveUi(true); render();
+        try{ window.scrollTo(0,0); }catch(e){}
+      }
+      break;
     case 'entry-edit': openEntrySheet(id); break;
     case 'principles-edit': openPrinciplesSheet(); break;
     case 'entry-del': deleteEntry(id); break;
