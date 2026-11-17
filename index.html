@@ -209,6 +209,8 @@ details[open] .chev{transform:rotate(180deg)}
 .cal-d{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;flex:0 0 auto}
 .cal-l{display:block;width:100%;max-width:100%;font-size:10px;font-weight:800;color:#BF5C42;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;line-height:1.15;flex:0 0 auto}
+.cal-l.two{font-size:9.5px;line-height:1.1;white-space:normal;letter-spacing:-.02em}
+.cal-l.two>span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-cell.out{opacity:.3}
 .cal-cell.has{background:#FDF2E9}
 .cal-cell.has.future{background:#FFEBE3}
@@ -1418,8 +1420,34 @@ function cellHTML(dayNum, dateStr, out, t, sel){
   var recTxt=slots.length===2?' 기록 2끼':(slots.length?' 기록 1끼':'');
   return '<button class="'+cls+'" data-act="sel-date" data-date="'+dateStr+'" aria-label="'+mdLong(dateStr)+recTxt+'">'+
     '<span class="cal-d">'+dayNum+'</span>'+
-    '<span class="cal-l">'+(label?esc(label):'&nbsp;')+'</span>'+dots+
+    calLabelHTML(label)+dots+
   '</button>';
+}
+
+/* 달력 칸 이름: 4글자까지는 한 줄, 더 길면 두 줄로 나눠 보여줘요.
+   재료 이름 경계에서 나누고('한우고구마' → 한우 / 고구마), 못 찾으면 가운데에서 나눠요. */
+var CAL_ONE_LINE=4;
+function calLabelLines(label){
+  var t=String(label||'').replace(/\s+/g,'');
+  if(t.length<=CAL_ONE_LINE) return [t];
+  var names=state.ingredients.map(function(g){ return String(g.name||'').replace(/\s+/g,''); })
+    .filter(function(n){ return n&&n.length<t.length; })
+    .sort(function(a,b){ return b.length-a.length; });
+  for(var i=0;i<names.length;i++){
+    if(t.indexOf(names[i])===0) return [names[i], t.slice(names[i].length)];
+  }
+  for(i=0;i<names.length;i++){
+    var k=t.length-names[i].length;
+    if(k>0&&t.slice(k)===names[i]) return [t.slice(0,k), names[i]];
+  }
+  var half=Math.ceil(t.length/2);
+  return [t.slice(0,half), t.slice(half)];
+}
+function calLabelHTML(label){
+  if(!label) return '<span class="cal-l">&nbsp;</span>';
+  var lines=calLabelLines(label);
+  if(lines.length===1) return '<span class="cal-l">'+esc(lines[0])+'</span>';
+  return '<span class="cal-l two"><span>'+esc(lines[0])+'</span><span>'+esc(lines[1])+'</span></span>';
 }
 
 function calendarHTML(){
