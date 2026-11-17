@@ -1623,6 +1623,7 @@ function openLogSheet(date){
       }
       var am=buildSlot('am'), pm=buildSlot('pm');
       var prevHadEaten=logHasEaten(state.logs[date]);
+      var prevSlotCount=logSlots(state.logs[date]).length;
       if(!am&&!pm){
         var had=!!state.logs[date];
         if(had) delete state.logs[date];
@@ -1657,8 +1658,10 @@ function openLogSheet(date){
       else if(back) baseMsg='기록을 고치고 일정 '+back+'개를 하루 당겼어요';
       else baseMsg=(am&&pm)?'오전·오후 기록을 저장했어요':'기록을 저장했어요';
       toast(notes.length?baseMsg+' · '+notes.join(' · '):baseMsg);
-      /* 마지막 계획일에 먹인 기록 → 연결된 팩 수량 차감 확인 */
-      if(e&&date===e.end&&!prevHadEaten&&logHasEaten(rec)){
+      /* 마지막 계획일에 먹인 기록 → 연결된 팩 수량 차감 확인
+         (그 날 첫 기록이거나, 1끼만 있던 날에 두 번째 끼를 마저 기록할 때) */
+      var newSlotCount=[am,pm].filter(Boolean).length;
+      if(e&&date===e.end&&logHasEaten(rec)&&(!prevHadEaten||(prevSlotCount===1&&newSlotCount===2&&mpd===2))){
         var cand=consumeCandidate(e);
         if(cand) askConsumePack(cand);
       }
