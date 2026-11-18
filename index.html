@@ -537,7 +537,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.18b';
+var APP_VERSION='2026.11.18c';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -1719,6 +1719,9 @@ function itemHTML(s){
     tools+='<button class="mini" data-act="stock-unopen" data-id="'+s.id+'">개봉 취소</button>';
   } else if(s.qty>0){
     tools+='<button class="mini mini-primary" data-act="stock-open" data-id="'+s.id+'">개봉일 기록</button>';
+  } else {
+    /* 다 먹은 팩: 같은 팩을 다시 샀을 때 이름·브랜드·용량을 그대로 복사해 새로 추가 */
+    tools+='<button class="mini mini-primary" data-act="stock-readd" data-id="'+s.id+'">다시 추가</button>';
   }
   tools+='<button class="mini" data-act="stock-edit" data-id="'+s.id+'">수정</button>';
 
@@ -1786,8 +1789,10 @@ function renderStock(){
   html+=inFridge.length?inFridge.map(itemHTML).join(''):'<div class="card" style="color:#797465;font-size:12.5px">보유 중인 팩이 없어요.</div>';
   if(emptied.length){
     html+='<details class="fold"><summary>🗂 다 먹은 팩 '+emptied.length+'개 <span class="chev">▾</span></summary>'+
-      '<p class="fold-note">수량을 + 로 늘리면 다시 냉장고 목록으로 올라가요.</p>'+
-      emptied.map(itemHTML).join('')+'</details>';
+      '<p class="fold-note">같은 팩을 또 샀다면 <b>다시 추가</b>로 이름·브랜드·용량을 그대로 복사할 수 있어요.</p>'+
+      emptied.map(itemHTML).join('')+
+      '<button type="button" class="btn btn-ghost btn-block" style="margin-top:4px" data-act="stock-clear-empty">다 먹은 팩 '+emptied.length+'개 모두 지우기</button>'+
+      '</details>';
   }
   html+='<div class="sec-head"><span class="sec-title">도착 예정</span><span class="sec-sub">'+sumQty(expected)+'팩</span></div>';
   html+=expected.length?expected.map(itemHTML).join(''):'<div class="card" style="color:#797465;font-size:12.5px">도착 예정인 팩이 없어요.</div>';
@@ -2807,35 +2812,39 @@ function askAddIngredients(list, e){
   });
 }
 
-function openStockSheet(id){
+function openStockSheet(id,copyId){
   var s=id?findStock(id):null;
+  /* copyId: 다 먹은 팩을 본떠 새 품목 추가 (이름·브랜드·용량·기한·메모만 복사, 상태는 도착 예정) */
+  var tpl=(!s&&copyId)?findStock(copyId):null;
+  var v=s||tpl;
   var body='<form id="stockForm" novalidate>'+
-    '<label class="field">품목 이름<input id="fName" type="text" value="'+esc(s?s.name:'')+'" placeholder="예: 루솔 한우미음"></label>'+
+    (tpl?'<p class="sheet-note">"'+esc(tpl.name)+'"을(를) 그대로 복사했어요. 팩 수와 도착 예정일만 확인해 주세요.</p>':'')+
+    '<label class="field">품목 이름<input id="fName" type="text" value="'+esc(v?v.name:'')+'" placeholder="예: 루솔 한우미음"></label>'+
     '<div class="field-row">'+
-      '<label class="field">브랜드<input id="fBrand" type="text" value="'+esc(s?s.brand:'')+'" placeholder="예: 루솔"></label>'+
-      '<label class="field">한 팩 용량 (g)<input id="fSize" type="number" inputmode="numeric" value="'+(s?s.size:140)+'"></label>'+
+      '<label class="field">브랜드<input id="fBrand" type="text" value="'+esc(v?v.brand:'')+'" placeholder="예: 루솔"></label>'+
+      '<label class="field">한 팩 용량 (g)<input id="fSize" type="number" inputmode="numeric" value="'+(v?v.size:140)+'"></label>'+
     '</div>'+
     '<div class="field-row">'+
       '<label class="field">팩 수<input id="fQty" type="number" inputmode="numeric" min="0" max="99" value="'+(s?s.qty:1)+'"></label>'+
-      '<label class="field">냉장 기한 (일)<input id="fLife" type="number" inputmode="numeric" min="1" max="14" value="'+(s?s.shelfLife:3)+'"></label>'+
+      '<label class="field">냉장 기한 (일)<input id="fLife" type="number" inputmode="numeric" min="1" max="14" value="'+(v?v.shelfLife:3)+'"></label>'+
     '</div>'+
     '<label class="field">상태<select id="fStatus">'+
-      '<option value="arrived"'+(!s||s.status==='arrived'?' selected':'')+'>냉장고에 있음</option>'+
-      '<option value="expected"'+(s&&s.status==='expected'?' selected':'')+'>도착 예정</option>'+
+      '<option value="arrived"'+((s?s.status==='arrived':!tpl)?' selected':'')+'>냉장고에 있음</option>'+
+      '<option value="expected"'+((s?s.status==='expected':!!tpl)?' selected':'')+'>도착 예정</option>'+
     '</select></label>'+
     '<div class="field-row">'+
       '<label class="field">도착일<input id="fArrived" type="date" value="'+esc(s&&s.arrived?s.arrived:todayISO())+'"></label>'+
       '<label class="field">도착 예정일<input id="fExpected" type="date" value="'+esc(s&&s.expected?s.expected:'')+'"></label>'+
     '</div>'+
     '<label class="field">유통기한 (선택)<input id="fExpiry" type="date" value="'+esc(s&&s.expiryDate?s.expiryDate:'')+'"></label>'+
-    '<label class="field">메모<input id="fNote" type="text" value="'+esc(s?s.note:'')+'" placeholder="예: 140g 팩 3일 소분"></label>'+
+    '<label class="field">메모<input id="fNote" type="text" value="'+esc(v?v.note:'')+'" placeholder="예: 140g 팩 3일 소분"></label>'+
     '<div class="sheet-actions">'+
       '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
       '<button type="submit" class="btn btn-primary">'+(s?'수정 저장':'추가하기')+'</button>'+
     '</div>'+
     (s?'<button type="button" class="btn btn-danger btn-block" style="margin-top:8px" data-act="stock-del" data-id="'+s.id+'">이 품목 삭제</button>':'')+
   '</form>';
-  openSheet({title:s?'재고 품목 수정':'새 재고 품목', body:body, onMount:function(root){
+  openSheet({title:s?'재고 품목 수정':(tpl?'같은 팩 다시 추가':'새 재고 품목'), body:body, onMount:function(root){
     root.querySelector('#stockForm').addEventListener('submit', function(ev){
       ev.preventDefault();
       var name=(root.querySelector('#fName').value||'').trim();
@@ -3267,6 +3276,17 @@ function markArrived(id){
   s.status='arrived';
   s.arrived=todayISO();
   save(); render(); toast('도착 처리했어요');
+}
+
+/* 다 먹은 팩(0팩·개봉 안 함)을 한 번에 지우기 */
+function clearEmptiedStock(){
+  var list=state.stock.filter(function(x){ return x.status==='arrived'&&!(x.qty>0)&&!x.opened; });
+  if(!list.length) return;
+  confirmDo('다 먹은 팩 지우기','다 먹은 팩 '+list.length+'개를 목록에서 지울까요? 먹인 기록과 식단은 그대로 남아요.','모두 지우기',function(){
+    var ids=list.map(function(x){ return x.id; });
+    state.stock=state.stock.filter(function(x){ return ids.indexOf(x.id)<0; });
+    save(); render(); toast('다 먹은 팩 '+ids.length+'개를 지웠어요');
+  });
 }
 
 function deleteStock(id){
@@ -4076,6 +4096,8 @@ document.addEventListener('click', function(ev){
     case 'entry-del': deleteEntry(id); break;
     case 'stock-new': openStockSheet(null); break;
     case 'stock-edit': openStockSheet(id); break;
+    case 'stock-readd': openStockSheet(null,id); break;
+    case 'stock-clear-empty': clearEmptiedStock(); break;
     case 'stock-inc': changeQty(id,1); break;
     case 'stock-dec': changeQty(id,-1); break;
     case 'stock-open': openOpenSheet(id); break;
