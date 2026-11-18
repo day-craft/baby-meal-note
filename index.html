@@ -120,6 +120,10 @@ button{font-family:inherit}
 .slottabs button .st-l{font-size:13px;font-weight:800;color:#7C6E60;letter-spacing:-.01em;white-space:nowrap}
 .slottabs button .st-l em{font-style:normal;font-size:11px;font-weight:700;color:#887265}
 .slottabs button .st-s{font-size:11px;font-weight:700;color:#8E8276;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slottabs button.st-pend .st-s{color:#B8523A}
+.slottabs button.st-none .st-s{color:#A2937F;font-weight:600}
+.slottabs button.st-del .st-s{color:#B0452F}
+.slot-pending{margin:0 0 10px;padding:9px 12px;border-radius:12px;background:#FBF4EC;border:1px dashed #EEDCCB;font-size:12.5px;font-weight:700;color:#8A7766;line-height:1.45}
 .slottabs button.on{background:#FCE8DC;border-color:#F5C9B4;box-shadow:0 2px 6px rgba(200,130,100,.12)}
 .slottabs button.on .st-l{color:#B85B41}
 .slottabs button.on .st-l em{color:#C08A70}
@@ -525,7 +529,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.17c';
+var APP_VERSION='2026.11.18';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -1978,32 +1982,61 @@ function openLogSheet(date){
   var shiftedAlready=!!(prev&&prev.shifted);
   var draft={am:null,pm:null};
   var touched={am:false,pm:false};
+  /* 저장 버튼을 누르면 실제로 저장될 끼니. 화면(탭 상태·저장 버튼)에 그대로 보여줘요.
+     · 이미 저장된 끼니 → 저장 대상
+     · 시트를 열 때 처음 보이는 끼니 → 기본값(완식·목표 g)으로 저장 대상 (바로 '저장'만 눌러도 되게)
+     · 다른 끼니 → '기록 전'. 먹은 양을 고르거나 입력해야 저장 대상이 돼요 */
+  var include={am:false,pm:false};
+  var wasSaved={am:!!(prev&&prev.am), pm:!!(prev&&prev.pm)};
   if(prev&&prev.am) draft.am={amount:prev.am.amount,grams:prev.am.grams,reaction:prev.am.reaction,at:prev.am.at,saved:true};
   if(prev&&prev.pm) draft.pm={amount:prev.pm.amount,grams:prev.pm.grams,reaction:prev.pm.reaction,at:prev.pm.at,saved:true};
+  include.am=!!draft.am; include.pm=!!draft.pm;
   /* 처음 열 때의 탭: 2식이면 아직 기록 없는 끼니부터 */
   var cur='am';
   if(mpd===2) cur=!draft.am?'am':(!draft.pm?'pm':'am');
-  var openSlot=cur, switched=false;
+  if(!draft[cur]){
+    draft[cur]={amount:'full', grams:planGrams, reaction:'', at:null, saved:false};
+    include[cur]=true;
+  }
   var shiftChoice=!shiftedAlready;
   var unshiftChoice=false;
 
-  function slotStateText(k){
-    var d=draft[k];
-    if(!d) return '기록 없음';
+  function slotValueText(d){
     var skip=(d.amount==='skip');
     return (AMT_LABEL[d.amount]||'기록')+(!skip&&d.grams?' '+d.grams+'g':'');
   }
+  /* 탭 아래 작은 글씨: 저장 버튼을 눌렀을 때 이 끼니가 어떻게 되는지 */
+  function slotStateText(k){
+    var d=draft[k];
+    if(include[k]&&d){
+      if(!wasSaved[k]) return '저장 예정 · '+slotValueText(d);
+      return (touched[k]?'수정 예정 · ':'저장됨 · ')+slotValueText(d);
+    }
+    return wasSaved[k]?'삭제 예정':'기록 전';
+  }
+  function slotStateClass(k){
+    if(include[k]&&draft[k]) return (!wasSaved[k]||touched[k])?'pend':'done';
+    return wasSaved[k]?'del':'none';
+  }
+  function saveLabel(){
+    var names=SLOTS.filter(function(x){ return include[x.v]&&draft[x.v]; }).map(function(x){ return x.l; });
+    var removed=SLOTS.filter(function(x){ return wasSaved[x.v]&&!(include[x.v]&&draft[x.v]); }).map(function(x){ return x.l; });
+    if(names.length&&removed.length) return names.join('·')+' 저장 · '+removed.join('·')+' 삭제';
+    if(names.length) return names.join('·')+' 저장';
+    if(removed.length) return removed.join('·')+' 기록 지우기';
+    return '';
+  }
   function tabsHTML(){
     return SLOTS.map(function(s){
-      return '<button type="button" data-slot="'+s.v+'" class="'+(cur===s.v?'on':'')+'">'+
+      return '<button type="button" data-slot="'+s.v+'" class="'+(cur===s.v?'on ':'')+'st-'+slotStateClass(s.v)+'">'+
         '<span class="st-l">'+s.l+' <em>('+s.n+')</em></span>'+
         '<span class="st-s">'+esc(slotStateText(s.v))+'</span></button>';
     }).join('');
   }
   function bodyHTML(){
-    var d=draft[cur];
-    var amt=d?d.amount:'full';
-    var grams=d?d.grams:planGrams;
+    var d=include[cur]?draft[cur]:null;
+    var amt=d?d.amount:'';
+    var grams=d?d.grams:'';
     var rx=d?d.reaction:'';
     var unshiftWrap='';
     if(shiftedAlready){
@@ -2012,7 +2045,8 @@ function openLogSheet(date){
         '<p class="sheet-note" style="margin:0 0 4px">이 날을 쉬어감으로 미뤘던 일정이 하루 당겨져요. 체크하지 않으면 일정은 그대로 둬요.</p>'+
       '</div>';
     }
-    return '<div class="seg" id="amtSeg">'+AMOUNTS.map(function(a){
+    var pendNote=d?'':'<p class="slot-pending">'+(wasSaved[cur]?'이 끼니 기록은 저장하면 지워져요. 다시 남기려면 먹은 양을 골라 주세요.':'아직 기록 전이에요. 먹은 양을 고르면 이 끼니도 저장돼요.')+'</p>';
+    return pendNote+'<div class="seg" id="amtSeg">'+AMOUNTS.map(function(a){
         return '<button type="button" data-amt="'+a.v+'" data-v="'+a.v+'" class="'+(a.v===amt?'on':'')+'">'+a.e+' '+a.l+'</button>';
       }).join('')+'</div>'+
       '<div class="hidden" id="skipExtra">'+
@@ -2023,10 +2057,11 @@ function openLogSheet(date){
           (shiftedAlready?'이 날짜는 이미 한 번 미뤘어요. 같은 일정이 두 번 밀리지 않도록 미루기는 꺼 두었어요.'
             :'오전·오후 <b>모두</b> 쉬어감일 때만 이후 일정이 하루 밀려요. 한 끼만 건너뛰면 일정은 그대로예요.')+'</p>'+
       '</div>'+unshiftWrap+
-      '<label class="field" style="margin-top:16px">실제로 먹은 양 (g)<input id="fGrams" type="number" inputmode="numeric" step="1" min="0" max="400" data-def="'+esc(planGrams)+'" data-shifted="'+(shiftedAlready?'1':'0')+'" value="'+esc(grams)+'"></label>'+
+      '<label class="field" style="margin-top:16px">실제로 먹은 양 (g)<input id="fGrams" type="number" inputmode="numeric" step="1" min="0" max="400" data-def="'+esc(planGrams)+'" data-shifted="'+(shiftedAlready?'1':'0')+'" value="'+esc(grams)+'"'+(planGrams?' placeholder="목표 '+esc(planGrams)+'g"':'')+'></label>'+
       '<label class="field">반응 · 메모<textarea id="fReaction" rows="3" placeholder="예: 끝까지 잘 먹음. 입가 발진 없음">'+esc(rx)+'</textarea></label>'+
       '<div class="rx-chips" id="rxChips">'+rxChipsHTML(rx)+'</div>'+
-      (d?'<button type="button" class="btn btn-ghost btn-block slotclear" id="slotClear">이 끼니('+slotLabel(cur)+') 기록 지우기</button>':'');
+      (d?'<button type="button" class="btn btn-ghost btn-block slotclear" id="slotClear">'+
+        (wasSaved[cur]?'이 끼니('+slotLabel(cur)+') 기록 지우기':'이 끼니('+slotLabel(cur)+')는 빼고 저장')+'</button>':'');
   }
 
   var body='<form id="logForm" novalidate>'+
@@ -2035,7 +2070,7 @@ function openLogSheet(date){
     '<div id="slotBody">'+bodyHTML()+'</div>'+
     '<div class="sheet-actions">'+
       '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
-      '<button type="submit" class="btn btn-primary">저장</button>'+
+      '<button type="submit" class="btn btn-primary" id="logSave">'+esc(saveLabel()||'저장')+'</button>'+
     '</div>'+
     (prev?'<button type="button" class="btn btn-danger btn-block" style="margin-top:8px" data-act="log-del" data-date="'+date+'">이 날 기록 모두 지우기</button>':'')+
   '</form>';
@@ -2046,6 +2081,7 @@ function openLogSheet(date){
     function capture(){
       var on=bodyEl.querySelector('#amtSeg .on');
       if(!on) return;
+      include[cur]=true;
       var amt=on.getAttribute('data-amt')||'full';
       var gEl=bodyEl.querySelector('#fGrams');
       var rEl=bodyEl.querySelector('#fReaction');
@@ -2058,18 +2094,53 @@ function openLogSheet(date){
       var uc=bodyEl.querySelector('#fUnshift');
       if(uc) unshiftChoice=!!uc.checked;
     }
+    var saveBtn=root.querySelector('#logSave');
+    function paintSave(){
+      var lb=saveLabel();
+      saveBtn.textContent=lb||'저장할 끼니가 없어요';
+      saveBtn.disabled=!lb;
+      saveBtn.style.opacity=lb?'':'.5';
+    }
+    /* 탭 상태 글씨와 저장 버튼 이름을 지금 화면 값에 맞춤 */
+    function refreshMeta(){
+      capture();
+      tabs.innerHTML=tabsHTML();
+      paintSave();
+    }
+    /* 기록 전인 끼니에서 양 대신 g·메모를 먼저 입력하면 '완식'을 골라 둠 */
+    function ensureAmount(){
+      if(bodyEl.querySelector('#amtSeg .on')) return;
+      var fb=bodyEl.querySelector('#amtSeg [data-amt="full"]');
+      if(fb) fb.classList.add('on');
+      syncAmtSkip(root);
+    }
     function paint(){
       tabs.innerHTML=tabsHTML();
       bodyEl.innerHTML=bodyHTML();
       syncAmtSkip(root);
+      refreshMeta();
     }
     bodyEl.addEventListener('input', function(ev){
       touched[cur]=true;
+      ensureAmount();
       if(ev.target&&ev.target.id==='fReaction'){
         var rc=bodyEl.querySelector('#rxChips');
         if(rc) rc.innerHTML=rxChipsHTML(ev.target.value);
       }
+      refreshMeta();
+      addClearBtn();
     });
+    /* 기록 전이던 끼니가 저장 대상이 되면 안내 문구를 지우고 '빼기' 버튼을 달아 줌 */
+    function addClearBtn(){
+      var pn=bodyEl.querySelector('.slot-pending');
+      if(pn&&include[cur]) pn.parentNode.removeChild(pn);
+      if(include[cur]&&!bodyEl.querySelector('#slotClear')){
+        var b=document.createElement('button');
+        b.type='button'; b.id='slotClear'; b.className='btn btn-ghost btn-block slotclear';
+        b.textContent=wasSaved[cur]?'이 끼니('+slotLabel(cur)+') 기록 지우기':'이 끼니('+slotLabel(cur)+')는 빼고 저장';
+        bodyEl.appendChild(b);
+      }
+    }
     bodyEl.addEventListener('click', function(ev){
       var rxb=ev.target.closest?ev.target.closest('[data-rx]'):null;
       if(rxb){
@@ -2080,16 +2151,31 @@ function openLogSheet(date){
           if(rc2) rc2.innerHTML=rxChipsHTML(ta.value);
         }
         touched[cur]=true;
+        ensureAmount();
+        refreshMeta();
+        addClearBtn();
         return;
       }
       var cl=ev.target.closest?ev.target.closest('#slotClear'):null;
       if(cl){
-        draft[cur]=null; touched[cur]=false;
-        paint();
-        toast(slotLabel(cur)+' 기록을 지웠어요 · 저장을 눌러 반영해요');
+        draft[cur]=null; include[cur]=false; touched[cur]=false;
+        bodyEl.innerHTML=bodyHTML(); syncAmtSkip(root);
+        tabs.innerHTML=tabsHTML(); paintSave();
+        toast(wasSaved[cur]?slotLabel(cur)+' 기록은 저장하면 지워져요':slotLabel(cur)+'는 빼고 저장해요');
         return;
       }
-      if(ev.target.closest&&ev.target.closest('#amtSeg')) touched[cur]=true;
+      if(ev.target.closest&&ev.target.closest('#amtSeg [data-amt]')){
+        touched[cur]=true;
+        var firstPick=!include[cur];
+        /* 버튼 선택 표시는 문서 전체 클릭 처리에서 바뀌므로 그 다음에 반영 */
+        setTimeout(function(){
+          var g=bodyEl.querySelector('#fGrams');
+          var on=bodyEl.querySelector('#amtSeg .on');
+          if(firstPick&&g&&!g.value&&planGrams&&!(on&&on.getAttribute('data-amt')==='skip')) g.value=planGrams;
+          refreshMeta();
+          addClearBtn();
+        },0);
+      }
     });
     tabs.addEventListener('click', function(ev){
       var b=ev.target.closest?ev.target.closest('[data-slot]'):null;
@@ -2098,20 +2184,18 @@ function openLogSheet(date){
       if(k===cur) return;
       capture();
       cur=k;
-      switched=true;
       paint();
     });
     syncAmtSkip(root);
+    refreshMeta();
     root.querySelector('#logForm').addEventListener('submit', function(ev){
       ev.preventDefault();
       capture();
       var now=new Date().toISOString();
       function buildSlot(k){
         var d=draft[k];
-        if(!d) return null;
-        /* 저장된 적도 없고 손대지도 않은 슬롯은 만들지 않음.
-           다만 시트를 열자마자 보이던 끼니는 그대로 저장을 누르면 예전처럼 기본값으로 기록 */
-        if(!d.saved&&!touched[k]&&!(k===openSlot&&!switched)) return null;
+        /* 화면에 '저장 예정/저장됨/수정 예정'으로 보이던 끼니만 저장 */
+        if(!d||!include[k]) return null;
         return {
           amount:AMT_LABEL[d.amount]?d.amount:'full',
           grams:(d.amount==='skip'?'0':(d.grams==null?'':String(d.grams))),
