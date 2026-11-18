@@ -299,6 +299,10 @@ details[open] .chev{transform:rotate(180deg)}
 .alert-text{margin:8px 0 0;font-size:12.5px;font-weight:600;color:#7A5A47;line-height:1.5;word-break:keep-all}
 .app-version{margin:18px 0 0;text-align:center;font-size:11px;color:#817468}
 
+.pd-row{display:flex;align-items:center;gap:9px;margin:9px 0 0;padding-top:9px;border-top:1px dashed #EFD9C8;font-size:13px;color:#5F544A}
+.pd-row b{color:#3F3A33}
+.pd-row input{accent-color:#E57F63;width:18px;height:18px;flex:none}
+.pd-row em{font-style:normal;font-weight:800;color:#B8523A;margin-left:2px}
 .alert-foot{margin:8px 0 0;font-size:11px;color:#817565}
 .ing-alert .ing-suggest{margin-top:8px}
 .ing-suggest{margin-top:10px;border-radius:14px;background:#FDF4EA;border:1px solid #F4E2D0;padding:10px 12px}
@@ -533,7 +537,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.18';
+var APP_VERSION='2026.11.18b';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -714,6 +718,7 @@ function normalize(s){
          (기존 저장본에 이 필드가 없으면 그대로 없이 유지 → 예전처럼 grams 사용) */
       var recDg=dailyGramsFit(e.dailyGrams, rec.start, rec.end);
       if(recDg) rec.dailyGrams=recDg;
+      if(isDate(e.packsDone)) rec.packsDone=e.packsDone;   /* 이 식단의 다 먹은 팩 정리를 마친 날 */
       out.entries.push(rec);
     });
   } else {
@@ -1027,6 +1032,92 @@ function packAlertsHTML(){
       (a.guessed?'<p class="alert-foot">이름으로 찾은 팩이에요. 일정 수정에서 팩을 직접 연결하면 더 정확해져요.</p>':'')+
     '</div>';
   }).join('');
+}
+
+/* ───────── 식단 ↔ 재고: 개봉·다 먹은 팩 정리 ─────────
+   식단에 쓰는 팩을 재료별로 하나씩 고릅니다 (한우감자미음 → 한우 1팩 + 감자 1팩).
+   같은 재료 팩이 여러 개면 개봉 중인 것 → 먼저 도착한 것 순서. */
+function entryPackPicks(e){
+  var r=entryStockFor(e), groups={}, order=[];
+  r.packs.forEach(function(x){
+    var c=coreName(x.name,x.brand)||x.id;
+    if(!groups[c]){ groups[c]=[]; order.push(c); }
+    groups[c].push(x);
+  });
+  var out=[];
+  order.forEach(function(c){
+    /* 이름으로 찾은 경우엔 같은 재료의 다른 팩(예: 특가분)도 후보에 넣어요 */
+    var pool=groups[c].slice();
+    if(r.guessed) state.stock.forEach(function(x){
+      if(pool.indexOf(x)<0&&coreName(x.name,x.brand)===c&&sameBrand(x.brand,e.brand)) pool.push(x);
+    });
+    var have=pool.filter(function(x){ return x.status==='arrived'&&x.qty>0; });
+    if(!have.length) return;
+    have.sort(function(a,b){
+      if(!!a.opened!==!!b.opened) return a.opened?-1:1;
+      return String(a.arrived||'9999')<String(b.arrived||'9999')?-1:1;
+    });
+    out.push({core:c, pack:have[0]});
+  });
+  return {picks:out, guessed:r.guessed};
+}
+/* 식단이 끝났는지: 마지막 날 먹인 기록이 있거나, 이미 지난 식단에 먹인 날이 있으면 */
+function entryFinished(e){
+  var t=todayISO();
+  if(logHasEaten(state.logs[e.end])) return true;
+  if(e.end>=t) return false;
+  for(var d=e.start; d<=e.end; d=addDays(d,1)) if(logHasEaten(state.logs[d])) return true;
+  return false;
+}
+var packSnooze={};   /* '나중에' 누른 식단 (이번 화면에서만 숨김) */
+function packDoneCandidates(){
+  /* 끝난 지 3일 안 된 식단만 (예전에 손으로 정리했을 수 있는 오래된 식단은 다시 묻지 않음) */
+  var t=todayISO(), from=addDays(t,-3);
+  return state.entries.filter(function(e){
+    return !e.packsDone&&!packSnooze[e.id]&&e.end>=from&&e.end<=t&&entryFinished(e);
+  }).map(function(e){ return {e:e, p:entryPackPicks(e)}; })
+    .filter(function(x){ return x.p.picks.length; })
+    .sort(function(a,b){ return a.e.end<b.e.end?1:-1; });
+}
+function packDoneHTML(){
+  return packDoneCandidates().map(function(x){
+    var e=x.e;
+    var rows=x.p.picks.map(function(pk){
+      var s=pk.pack, after=s.qty-1;
+      return '<label class="check pd-row"><input type="checkbox" data-pd="'+e.id+'" data-sid="'+s.id+'" checked>'+
+        '<span><b>'+esc(s.name)+'</b> '+s.qty+'팩 → '+after+'팩'+(after<=0?' <em>다 먹음</em>':'')+'</span></label>';
+    }).join('');
+    return '<div class="alert-card pd-card">'+
+      '<div class="alert-head"><span>📦 '+esc(e.short||e.menu)+' 식단을 다 먹었어요</span>'+
+        '<button type="button" class="linkbadge" data-act="plan-link" data-date="'+e.start+'">'+mdShort(e.start)+'~'+mdShort(e.end)+'</button></div>'+
+      '<p class="alert-text">쓴 팩을 재고에서 줄일까요? 남은 팩은 체크를 풀어 주세요.</p>'+
+      rows+
+      (x.p.guessed?'<p class="alert-foot">이름으로 찾은 팩이에요. 다르면 체크를 풀어 주세요.</p>':'')+
+      '<div class="ing-suggest-btns" style="margin-top:10px">'+
+        '<button type="button" class="mini mini-primary" data-act="pack-done" data-id="'+e.id+'">재고 정리</button>'+
+        '<button type="button" class="mini" data-act="pack-keep" data-id="'+e.id+'">줄이지 않기</button>'+
+        '<button type="button" class="mini" data-act="pack-snooze" data-id="'+e.id+'">나중에</button>'+
+      '</div></div>';
+  }).join('');
+}
+function applyPackDone(id, consume){
+  var e=state.entries.filter(function(x){ return x.id===id; })[0];
+  if(!e) return;
+  var names=[];
+  if(consume){
+    var boxes=document.querySelectorAll('input[data-pd="'+id+'"]');
+    Array.prototype.forEach.call(boxes,function(b){
+      if(!b.checked) return;
+      var st=findStock(b.getAttribute('data-sid'));
+      if(!st||st.qty<=0) return;
+      st.qty=Math.max(0,st.qty-1);
+      st.opened='';
+      names.push(st.name+(st.qty<=0?' 다 먹음':' 1팩 줄임'));
+    });
+  }
+  e.packsDone=todayISO();
+  save(); render();
+  toast(consume?(names.length?'📦 '+names.join(' · '):'재고는 그대로 뒀어요'):'재고는 그대로 두고 넘어갔어요');
 }
 
 /* ───────── 재료 도감 ↔ 식단·먹인 기록 연결 ───────── */
@@ -1435,7 +1526,7 @@ function renderPlan(){
   $('#planMount').innerHTML=(mode==='cal')?calendarHTML():listHTML();
   var pw=$('#planWarnMount');
   if(pw){
-    var warnHtml=packAlertsHTML()+ingAlertsHTML()+backupReminderHTML();
+    var warnHtml=packDoneHTML()+packAlertsHTML()+ingAlertsHTML()+backupReminderHTML();
     pw.innerHTML=warnHtml?'<div style="margin-top:10px">'+warnHtml+'</div>':'';
   }
 }
@@ -1701,8 +1792,9 @@ function renderStock(){
   html+='<div class="sec-head"><span class="sec-title">도착 예정</span><span class="sec-sub">'+sumQty(expected)+'팩</span></div>';
   html+=expected.length?expected.map(itemHTML).join(''):'<div class="card" style="color:#797465;font-size:12.5px">도착 예정인 팩이 없어요.</div>';
   html+='<button class="btn btn-ghost btn-block" style="margin-top:6px" data-act="stock-new">＋ 품목 추가</button>';
-  var pa=packAlertsHTML();
-  $('#stockWarnMount').innerHTML=pa?'<div class="sec-head"><span class="sec-title">곧 먹을 식단 · 팩 확인</span><span class="sec-sub">'+ALERT_DAYS+'일 안</span></div>'+pa:'';
+  var pa=packAlertsHTML(), pd=packDoneHTML();
+  $('#stockWarnMount').innerHTML=(pd?'<div class="sec-head"><span class="sec-title">다 먹은 팩 정리</span></div>'+pd:'')+
+    (pa?'<div class="sec-head"><span class="sec-title">곧 먹을 식단 · 팩 확인</span><span class="sec-sub">'+ALERT_DAYS+'일 안</span></div>'+pa:'');
   $('#stockMount').innerHTML=html;
 }
 
@@ -2247,6 +2339,7 @@ function openLogSheet(date){
       }
       var ingStarted=autoIngOnLog(date);
       if(ingStarted.length) notes.push('🌱 '+ingStarted.join('·')+' 관찰 시작');
+      if(e&&!e.packsDone&&date===e.end&&logHasEaten(rec)&&entryPackPicks(e).picks.length) notes.push('📦 다 먹은 팩 정리 카드를 확인해 주세요');
       save(); closeSheet(); render();
       var baseMsg;
       if(daySkipped) baseMsg=moved?('쉬어감으로 표시하고 일정 '+moved+'개를 하루 미뤘어요'):(shiftedAlready?'쉬어감으로 표시했어요 (일정은 그대로)':'쉬어감으로 표시했어요');
@@ -2255,11 +2348,7 @@ function openLogSheet(date){
       toast(notes.length?baseMsg+' · '+notes.join(' · '):baseMsg);
       /* 마지막 계획일에 먹인 기록 → 연결된 팩 수량 차감 확인
          (그 날 첫 기록이거나, 1끼만 있던 날에 두 번째 끼를 마저 기록할 때) */
-      var newSlotCount=[am,pm].filter(Boolean).length;
-      if(e&&date===e.end&&logHasEaten(rec)&&(!prevHadEaten||(prevSlotCount===1&&newSlotCount===2&&mpd===2))){
-        var cand=consumeCandidate(e);
-        if(cand) askConsumePack(cand);
-      }
+      /* 마지막 날까지 먹었으면 오늘 탭에 '다 먹은 팩 정리' 카드가 떠요 (재료 통과 제안처럼) */
     });
   }});
 }
@@ -2267,8 +2356,8 @@ function openLogSheet(date){
 /* 연결된 팩이 있는 식단의 '첫 먹인 기록'을 저장하면 그 팩을 기록 날짜로 자동 개봉.
    도착 예정(expected) 팩은 건드리지 않고 안내만 해요. */
 function autoOpenLinkedPacks(e,date){
-  var packs=packsOf(e);
-  if(!packs.length) return null;
+  var r=entryStockFor(e);
+  if(!r.packs.length) return null;
   var first=null, d=e.start;
   while(d<=e.end){
     if(logHasEaten(state.logs[d])){ first=d; break; }
@@ -2276,42 +2365,19 @@ function autoOpenLinkedPacks(e,date){
   }
   var isFirst=(first===date);
   var openedNames=[], expectedNames=[];
-  packs.forEach(function(s){
-    if(s.status==='expected'){ expectedNames.push(s.name); return; }
-    if(isFirst&&s.status==='arrived'&&!s.opened&&s.qty>0){ s.opened=date; openedNames.push(s.name); }
+  /* 재료별로 한 팩씩: 이미 개봉 중인 팩이 있으면 그대로, 없으면 고른 팩을 개봉 */
+  var pk=entryPackPicks(e);
+  if(isFirst) pk.picks.forEach(function(x){
+    var s=x.pack;
+    if(!s.opened){ s.opened=date; openedNames.push(s.name); }
+  });
+  r.packs.forEach(function(s){
+    if(s.status!=='expected') return;
+    var c=coreName(s.name,s.brand);
+    if(!pk.picks.some(function(x){ return x.core===c; })) expectedNames.push(s.name);
   });
   return {first:isFirst, opened:openedNames, expected:expectedNames};
 }
-/* 마지막 계획일에 수량을 줄일 팩: 개봉된 팩 우선, 그다음 도착해 있는 팩 */
-function consumeCandidate(e){
-  var packs=packsOf(e).filter(function(s){ return s.status==='arrived'&&s.qty>=1; });
-  if(!packs.length) return null;
-  var opened=packs.filter(function(s){ return !!s.opened; });
-  return opened.length?opened[0]:packs[0];
-}
-function askConsumePack(s){
-  var after=s.qty-1;
-  hideToast();
-  openSheet({
-    title:'재고 차감',
-    body:'<p class="sheet-note" style="font-weight:700;color:#BF5C42">이 식단의 연결된 팩을 다 먹었나요? 재고 수량을 1개 줄일까요?</p>'+
-      '<p class="sheet-note">'+esc(s.name)+' · '+s.qty+'팩 → <b>'+after+'팩</b>'+(after<=0?' (소진 완료)':'')+'</p>'+
-      '<p class="sheet-note">줄이지 않으면 재고는 그대로 두고 먹인 기록만 남겨요.</p>'+
-      '<div class="sheet-actions">'+
-        '<button type="button" class="btn btn-ghost" data-act="close-sheet">그대로 두기</button>'+
-        '<button type="button" class="btn btn-primary" id="consumeYes">1개 줄이기</button>'+
-      '</div>',
-    onMount:function(root){
-      root.querySelector('#consumeYes').addEventListener('click', function(){
-        s.qty=Math.max(0,s.qty-1);
-        if(s.qty<=0) s.opened='';
-        save(); closeSheet(); render();
-        toast(s.qty<=0?('재고 1팩 줄임 · '+s.name+' 소진 완료'):'재고를 1팩 줄였어요');
-      });
-    }
-  });
-}
-
 function openPrinciplesSheet(){
   var pr=state.principles||seedState().principles;
   var items=Array.isArray(pr.items)?pr.items.slice():[];
@@ -2647,6 +2713,7 @@ function openEntrySheet(id, presetDate){
         packId:(pids[0]||null), packIds:pids
       };
       if(dgOut) rec.dailyGrams=dgOut;
+      if(e&&e.packsDone) rec.packsDone=e.packsDone;
       var oldEnd=e?e.end:'';
       var delta=e?diffDays(oldEnd,en):0;
       var follow=e?laterWillFollow(delta):false;
@@ -4023,6 +4090,9 @@ document.addEventListener('click', function(ev){
     case 'ing-edit': openIngSheet(id); break;
     case 'ing-status': setIngStatus(id, el.getAttribute('data-v')); break;
     case 'ing-snooze': ingSnooze[id]=true; render(); break;
+    case 'pack-done': applyPackDone(id,true); break;
+    case 'pack-keep': applyPackDone(id,false); break;
+    case 'pack-snooze': packSnooze[id]=true; render(); break;
     case 'ing-del': deleteIng(id); break;
     case 'brand-new': openBrandSheet(null); break;
     case 'brand-edit': openBrandSheet(id); break;
