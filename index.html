@@ -537,7 +537,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.18c';
+var APP_VERSION='2026.11.18d';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -737,7 +737,7 @@ function normalize(s){
   if(Array.isArray(s.stock)){
     s.stock.forEach(function(it){
       if(!it||!it.name) return;
-      out.stock.push({
+      var stRec={
         id:it.id?String(it.id):uid('s'), name:String(it.name),
         brand:it.brand?String(it.brand):'',
         size:Math.max(0,Math.round(num(it.size,0))),
@@ -749,7 +749,10 @@ function normalize(s){
         shelfLife:Math.max(1,Math.min(14,Math.round(num(it.shelfLife,3)))),
         expiryDate:isDate(it.expiryDate)?it.expiryDate:'',
         note:it.note?String(it.note):''
-      });
+      };
+      /* 먹인 기록으로 자동 개봉된 팩 표시 (기록을 지우면 개봉도 되돌리기 위해) */
+      if(it.autoOpened&&stRec.opened) stRec.autoOpened=true;
+      out.stock.push(stRec);
     });
   }
   if(Array.isArray(s.ingredients)){
@@ -1061,13 +1064,32 @@ function entryPackPicks(e){
   });
   return {picks:out, guessed:r.guessed};
 }
-/* 식단이 끝났는지: 마지막 날 먹인 기록이 있거나, 이미 지난 식단에 먹인 날이 있으면 */
+/* 식단에 먹인 기록이 하나도 안 남으면, 그 식단 기간에 자동 개봉된 팩을 되돌려요
+   ('개봉일 기록'으로 직접 연 팩은 그대로 둬요) */
+function revertAutoOpen(e){
+  for(var d=e.start; d<=e.end; d=addDays(d,1)) if(logHasEaten(state.logs[d])) return [];
+  var cores=entryStockFor(e).packs.map(function(x){ return coreName(x.name,x.brand); });
+  var undone=[];
+  state.stock.forEach(function(x){
+    if(!x.autoOpened||!x.opened||x.opened<e.start||x.opened>e.end) return;
+    if(cores.indexOf(coreName(x.name,x.brand))<0) return;
+    x.opened=''; delete x.autoOpened; undone.push(x.name);
+  });
+  return undone;
+}
+/* 식단이 끝났는지: 지난 식단은 먹인 날이 있으면, 오늘 끝나는 식단은 마지막 날 기록까지 */
 function entryFinished(e){
   var t=todayISO();
-  if(logHasEaten(state.logs[e.end])) return true;
-  if(e.end>=t) return false;
-  for(var d=e.start; d<=e.end; d=addDays(d,1)) if(logHasEaten(state.logs[d])) return true;
-  return false;
+  if(e.end<t){
+    for(var d=e.start; d<=e.end; d=addDays(d,1)) if(logHasEaten(state.logs[d])) return true;
+    return false;
+  }
+  if(e.end>t) return false;
+  /* 오늘이 마지막 날: 먹인 기록이 있어야 하고, 하루 2끼면 오전·오후 둘 다 기록돼야 해요 */
+  var lg=state.logs[e.end];
+  if(!logHasEaten(lg)) return false;
+  if(mealsPerDayOf(e)===2){ var n=normLog(lg); return !!(n&&n.am&&n.pm); }
+  return true;
 }
 var packSnooze={};   /* '나중에' 누른 식단 (이번 화면에서만 숨김) */
 function packDoneCandidates(){
@@ -1100,18 +1122,21 @@ function packDoneHTML(){
       '</div></div>';
   }).join('');
 }
-function applyPackDone(id, consume){
+function applyPackDone(id, consume, btn){
   var e=state.entries.filter(function(x){ return x.id===id; })[0];
   if(!e) return;
   var names=[];
   if(consume){
-    var boxes=document.querySelectorAll('input[data-pd="'+id+'"]');
+    /* 같은 카드가 오늘 탭·재고 탭 두 곳에 있으므로, 누른 카드 안의 체크박스만 읽어요 */
+    var card=btn&&btn.closest?btn.closest('.pd-card'):null;
+    if(!card) return;
+    var boxes=card.querySelectorAll('input[data-pd="'+id+'"]');
     Array.prototype.forEach.call(boxes,function(b){
       if(!b.checked) return;
       var st=findStock(b.getAttribute('data-sid'));
       if(!st||st.qty<=0) return;
       st.qty=Math.max(0,st.qty-1);
-      st.opened='';
+      st.opened=''; delete st.autoOpened;
       names.push(st.name+(st.qty<=0?' 다 먹음':' 1팩 줄임'));
     });
   }
@@ -2344,7 +2369,8 @@ function openLogSheet(date){
       }
       var ingStarted=autoIngOnLog(date);
       if(ingStarted.length) notes.push('🌱 '+ingStarted.join('·')+' 관찰 시작');
-      if(e&&!e.packsDone&&date===e.end&&logHasEaten(rec)&&entryPackPicks(e).picks.length) notes.push('📦 다 먹은 팩 정리 카드를 확인해 주세요');
+      if(e) revertAutoOpen(e);
+      if(e&&!e.packsDone&&packDoneCandidates().some(function(x){ return x.e.id===e.id; })) notes.push('📦 다 먹은 팩 정리 카드를 확인해 주세요');
       save(); closeSheet(); render();
       var baseMsg;
       if(daySkipped) baseMsg=moved?('쉬어감으로 표시하고 일정 '+moved+'개를 하루 미뤘어요'):(shiftedAlready?'쉬어감으로 표시했어요 (일정은 그대로)':'쉬어감으로 표시했어요');
@@ -2374,7 +2400,7 @@ function autoOpenLinkedPacks(e,date){
   var pk=entryPackPicks(e);
   if(isFirst) pk.picks.forEach(function(x){
     var s=x.pack;
-    if(!s.opened){ s.opened=date; openedNames.push(s.name); }
+    if(!s.opened){ s.opened=date; s.autoOpened=true; openedNames.push(s.name); }
   });
   r.packs.forEach(function(s){
     if(s.status!=='expected') return;
@@ -2862,8 +2888,9 @@ function openStockSheet(id,copyId){
         opened:s?s.opened:'',
         note:(root.querySelector('#fNote').value||'').trim()
       };
+      if(s&&s.autoOpened&&rec.opened===s.opened) rec.autoOpened=true;
       if(rec.status==='arrived'&&!isDate(rec.arrived)) rec.arrived=todayISO();
-      if(rec.status==='expected') rec.opened='';
+      if(rec.status==='expected'){ rec.opened=''; delete rec.autoOpened; }
       if(s){ state.stock=state.stock.map(function(x){ return x.id===s.id?rec:x; }); }
       else { state.stock.push(rec); }
       save(); closeSheet(); render(); toast(s?'품목을 고쳤어요':'품목을 추가했어요');
@@ -2889,7 +2916,7 @@ function openOpenSheet(id){
       ev.preventDefault();
       var d=root.querySelector('#fOpened').value;
       if(!isDate(d)) d=todayISO();
-      s.opened=d;
+      s.opened=d; delete s.autoOpened;   /* 직접 연 팩은 자동 되돌리기 대상이 아님 */
       s.shelfLife=Math.max(1,Math.min(14,Math.round(num(root.querySelector('#fLife').value,3))));
       save(); closeSheet(); render(); toast('D-day를 켰어요');
     });
@@ -3266,7 +3293,7 @@ function finishPack(id){
   var s=findStock(id);
   if(!s) return;
   s.qty=Math.max(0,s.qty-1);
-  s.opened='';
+  s.opened=''; delete s.autoOpened;
   save(); render(); toast('한 팩 비웠어요');
 }
 
@@ -3353,9 +3380,11 @@ function deleteLog(date){
       var un=root.querySelector('#fUnshiftDel');
       var doUn=!!(un&&un.checked);
       delete state.logs[date];
+      var de=entryForDate(date), undoneOpen=de?revertAutoOpen(de):[];
       var back=doUn?unshiftScheduleFrom(date):0;
       save(); closeSheet(); render();
-      toast(back?'기록을 지우고 일정 '+back+'개를 하루 당겼어요':'기록을 지웠어요');
+      var delMsg=back?'기록을 지우고 일정 '+back+'개를 하루 당겼어요':'기록을 지웠어요';
+      toast(undoneOpen.length?delMsg+' · '+undoneOpen.join('·')+' 개봉 표시도 되돌렸어요':delMsg);
     });
   }});
 }
@@ -4103,7 +4132,7 @@ document.addEventListener('click', function(ev){
     case 'stock-open': openOpenSheet(id); break;
     case 'stock-unopen':
       var so=findStock(id);
-      if(so){ so.opened=''; save(); render(); toast('개봉을 취소했어요'); }
+      if(so){ so.opened=''; delete so.autoOpened; save(); render(); toast('개봉을 취소했어요'); }
       break;
     case 'stock-finish': finishPack(id); break;
     case 'stock-arrive': markArrived(id); break;
@@ -4112,7 +4141,7 @@ document.addEventListener('click', function(ev){
     case 'ing-edit': openIngSheet(id); break;
     case 'ing-status': setIngStatus(id, el.getAttribute('data-v')); break;
     case 'ing-snooze': ingSnooze[id]=true; render(); break;
-    case 'pack-done': applyPackDone(id,true); break;
+    case 'pack-done': applyPackDone(id,true,el); break;
     case 'pack-keep': applyPackDone(id,false); break;
     case 'pack-snooze': packSnooze[id]=true; render(); break;
     case 'ing-del': deleteIng(id); break;
