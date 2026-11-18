@@ -123,6 +123,10 @@ button{font-family:inherit}
 .slottabs button.st-pend .st-s{color:#B8523A}
 .slottabs button.st-none .st-s{color:#A2937F;font-weight:600}
 .slottabs button.st-del .st-s{color:#B0452F}
+.save-summary{margin:16px 0 0;padding:10px 12px;border-radius:12px;background:#FDF1E8;font-size:12.5px;font-weight:600;color:#7A5A47;line-height:1.5;word-break:keep-all}
+.save-summary b{color:#B8523A;font-weight:800}
+.save-summary .del{color:#B0452F;font-weight:700}
+.save-summary.empty{background:#F7F1EA;color:#8A7766}
 .slot-pending{margin:0 0 10px;padding:9px 12px;border-radius:12px;background:#FBF4EC;border:1px dashed #EEDCCB;font-size:12.5px;font-weight:700;color:#8A7766;line-height:1.45}
 .slottabs button.on{background:#FCE8DC;border-color:#F5C9B4;box-shadow:0 2px 6px rgba(200,130,100,.12)}
 .slottabs button.on .st-l{color:#B85B41}
@@ -2018,13 +2022,17 @@ function openLogSheet(date){
     if(include[k]&&draft[k]) return (!wasSaved[k]||touched[k])?'pend':'done';
     return wasSaved[k]?'del':'none';
   }
-  function saveLabel(){
-    var names=SLOTS.filter(function(x){ return include[x.v]&&draft[x.v]; }).map(function(x){ return x.l; });
-    var removed=SLOTS.filter(function(x){ return wasSaved[x.v]&&!(include[x.v]&&draft[x.v]); }).map(function(x){ return x.l; });
-    if(names.length&&removed.length) return names.join('·')+' 저장 · '+removed.join('·')+' 삭제';
-    if(names.length) return names.join('·')+' 저장';
-    if(removed.length) return removed.join('·')+' 기록 지우기';
-    return '';
+  /* 저장 버튼 위 한 줄: 누르면 무엇이 저장·삭제되는지 (양까지) */
+  function saveSummary(){
+    var parts=[];
+    SLOTS.forEach(function(x){
+      if(include[x.v]&&draft[x.v]) parts.push('<b>'+x.l+'</b> '+esc(slotValueText(draft[x.v])));
+    });
+    SLOTS.forEach(function(x){
+      if(wasSaved[x.v]&&!(include[x.v]&&draft[x.v])) parts.push('<span class="del">'+x.l+' 기록은 지워져요</span>');
+    });
+    return parts.length?{ok:true, html:'저장하면 → '+parts.join(' · ')}
+      :{ok:false, html:'먹은 양을 고르면 저장할 수 있어요'};
   }
   function tabsHTML(){
     return SLOTS.map(function(s){
@@ -2068,9 +2076,10 @@ function openLogSheet(date){
     '<p class="sheet-note">'+mdLong(date)+' ('+dowOf(date)+') · '+esc(e?e.menu:'직접 기록')+'</p>'+
     '<div class="slottabs" id="slotTabs">'+tabsHTML()+'</div>'+
     '<div id="slotBody">'+bodyHTML()+'</div>'+
-    '<div class="sheet-actions">'+
+    '<p class="save-summary" id="logSummary">'+saveSummary().html+'</p>'+
+    '<div class="sheet-actions" style="margin-top:8px">'+
       '<button type="button" class="btn btn-ghost" data-act="close-sheet">취소</button>'+
-      '<button type="submit" class="btn btn-primary" id="logSave">'+esc(saveLabel()||'저장')+'</button>'+
+      '<button type="submit" class="btn btn-primary" id="logSave">저장</button>'+
     '</div>'+
     (prev?'<button type="button" class="btn btn-danger btn-block" style="margin-top:8px" data-act="log-del" data-date="'+date+'">이 날 기록 모두 지우기</button>':'')+
   '</form>';
@@ -2095,11 +2104,13 @@ function openLogSheet(date){
       if(uc) unshiftChoice=!!uc.checked;
     }
     var saveBtn=root.querySelector('#logSave');
+    var sumEl=root.querySelector('#logSummary');
     function paintSave(){
-      var lb=saveLabel();
-      saveBtn.textContent=lb||'저장할 끼니가 없어요';
-      saveBtn.disabled=!lb;
-      saveBtn.style.opacity=lb?'':'.5';
+      var sm=saveSummary();
+      sumEl.innerHTML=sm.html;
+      sumEl.classList.toggle('empty',!sm.ok);
+      saveBtn.disabled=!sm.ok;
+      saveBtn.style.opacity=sm.ok?'':'.5';
     }
     /* 탭 상태 글씨와 저장 버튼 이름을 지금 화면 값에 맞춤 */
     function refreshMeta(){
