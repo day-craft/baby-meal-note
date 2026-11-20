@@ -539,7 +539,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.20';
+var APP_VERSION='2026.11.20b';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -754,6 +754,7 @@ function normalize(s){
       };
       /* 먹인 기록으로 자동 개봉된 팩 표시 (기록을 지우면 개봉도 되돌리기 위해) */
       if(it.autoOpened&&stRec.opened) stRec.autoOpened=true;
+      if(isDate(it.finishedOn)) stRec.finishedOn=it.finishedOn;   /* 마지막으로 한 팩을 다 먹은 날 */
       out.stock.push(stRec);
     });
   }
@@ -1042,7 +1043,7 @@ function packAlertsHTML(){
 /* ───────── 식단 ↔ 재고: 개봉·다 먹은 팩 정리 ─────────
    식단에 쓰는 팩을 재료별로 하나씩 고릅니다 (한우감자미음 → 한우 1팩 + 감자 1팩).
    같은 재료 팩이 여러 개면 개봉 중인 것 → 먼저 도착한 것 순서. */
-function entryPackPicks(e){
+function entryPackPicks(e,forDone){
   var r=entryStockFor(e), groups={}, order=[];
   r.packs.forEach(function(x){
     var c=coreName(x.name,x.brand)||x.id;
@@ -1056,6 +1057,9 @@ function entryPackPicks(e){
     if(r.guessed) state.stock.forEach(function(x){
       if(pool.indexOf(x)<0&&coreName(x.name,x.brand)===c&&sameBrand(x.brand,e.brand)) pool.push(x);
     });
+    /* 정리 카드용: 이 식단 기간에 같은 재료 팩을 이미 '다 먹었어요'로 정리했으면 또 묻지 않아요 */
+    /* (첫날 아침에 끝낸 팩은 앞 식단 것일 수 있어 빼요. 하루짜리 식단은 그날 포함) */
+    if(forDone&&pool.some(function(x){ return x.finishedOn&&(x.finishedOn>e.start||(e.start===e.end&&x.finishedOn===e.start)); })) return;
     var have=pool.filter(function(x){ return x.status==='arrived'&&x.qty>0; });
     if(!have.length) return;
     have.sort(function(a,b){
@@ -1099,7 +1103,7 @@ function packDoneCandidates(){
   var t=todayISO(), from=addDays(t,-3);
   return state.entries.filter(function(e){
     return !e.packsDone&&!packSnooze[e.id]&&e.end>=from&&e.end<=t&&entryFinished(e);
-  }).map(function(e){ return {e:e, p:entryPackPicks(e)}; })
+  }).map(function(e){ return {e:e, p:entryPackPicks(e,true)}; })
     .filter(function(x){ return x.p.picks.length; })
     .sort(function(a,b){ return a.e.end<b.e.end?1:-1; });
 }
@@ -1139,6 +1143,7 @@ function applyPackDone(id, consume, btn){
       if(!st||st.qty<=0) return;
       st.qty=Math.max(0,st.qty-1);
       st.opened=''; delete st.autoOpened;
+      st.finishedOn=todayISO();
       names.push(st.name+(st.qty<=0?' 다 먹음':' 1팩 줄임'));
     });
   }
@@ -3333,6 +3338,7 @@ function finishPack(id){
   if(!s) return;
   s.qty=Math.max(0,s.qty-1);
   s.opened=''; delete s.autoOpened;
+  s.finishedOn=todayISO();
   save(); render(); toast('한 팩 비웠어요');
 }
 
@@ -3681,7 +3687,8 @@ function mergeStates(base,local,cloud){
 /* 이 폰에 아직 새 기록이 없을 때(시드와 동일) */
 var seedSigCache=null;
 function seedSig(){ if(!seedSigCache) seedSigCache=syncSig(normalize(seedState())); return seedSigCache; }
-function isSeedLike(s){ try{ return syncSig(s)===seedSig(); }catch(e){ return false; } }
+/* 처음 연 폰은 시드가 정리(normalize) 전 모양이라, 같은 형식으로 맞춰 비교해요 */
+function isSeedLike(s){ try{ return syncSig(normalize(JSON.parse(JSON.stringify(s))))===seedSig(); }catch(e){ return false; } }
 
 /* ── Firebase SDK: 필요한 순간에만, 실패해도 앱은 그대로 ── */
 function fbReady(){ return !!(window.firebase&&window.firebase.firestore&&window.firebase.apps); }
