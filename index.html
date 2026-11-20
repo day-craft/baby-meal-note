@@ -539,7 +539,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.19';
+var APP_VERSION='2026.11.20';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -3978,16 +3978,48 @@ function askCloudMerge(ref,cloudTxt,mineTxt){
     '<p class="sheet-note">☁️ 클라우드 · '+esc(cloudTxt)+'<br>📱 이 폰 · '+esc(mineTxt)+'</p>'+
     (seedLike?'<p class="sheet-note" style="font-weight:800;color:#3B7A57">이 폰에는 아직 새 기록이 없어요. 클라우드 기록을 불러오면 그대로 이어서 쓸 수 있어요.</p>':'')+
     '<p class="sheet-note">고르지 않은 쪽 기록은 사라져요. 가족 공유 중이라 고른 기록이 같은 코드를 쓴 모든 기기에 반영됩니다.</p>'+
+    '<p class="sheet-note" id="mergeNote" style="font-weight:700;color:#BF5C42;min-height:0"></p>'+
     '<div class="sheet-actions" style="margin-top:0"><button type="button" class="btn btn-primary" data-act="sync-merge-cloud">☁️ 클라우드 기록 불러오기</button></div>'+
     '<div class="sheet-actions" style="margin-top:8px"><button type="button" class="btn btn-ghost" data-act="sync-merge-phone">📱 이 폰 기록 올리기</button></div>'+
     '<div class="sheet-actions" style="margin-top:8px"><button type="button" class="btn btn-ghost" data-act="sync-merge-cancel">그만두기</button></div>';
   openSheet({title:'☁️ 가족 공유 연결',body:body});
 }
+/* 선택 창에서 버튼을 누른 뒤 기다리는 동안: 버튼을 '…하는 중'으로 바꾸고 막아 두기.
+   20초가 지나도 응답이 없으면 다시 누를 수 있게 풀고 이유를 보여줘요. */
+var mergeSeq=0, mergeTimer=null;
+function mergeBusy(act,label){
+  var root=document.getElementById('sheet');
+  if(!root) return;
+  clearTimeout(mergeTimer); mergeTimer=null;
+  Array.prototype.forEach.call(root.querySelectorAll('[data-act^="sync-merge-"]'),function(b){
+    if(!b.getAttribute('data-orig')) b.setAttribute('data-orig',b.textContent);
+    if(act){ b.disabled=true; b.style.opacity=(b.getAttribute('data-act')===act)?'':'.5'; if(b.getAttribute('data-act')===act) b.textContent=label; }
+    else { b.disabled=false; b.style.opacity=''; b.textContent=b.getAttribute('data-orig'); }
+  });
+  var note=root.querySelector('#mergeNote');
+  if(note) note.textContent='';
+}
+function mergeNote(msg){
+  var root=document.getElementById('sheet');
+  var note=root&&root.querySelector('#mergeNote');
+  if(note) note.textContent=msg;
+}
+function mergeWatch(seq){
+  mergeTimer=setTimeout(function(){
+    if(seq!==mergeSeq) return;
+    mergeBusy(null);
+    mergeNote('⏳ 클라우드 응답이 늦어요. 인터넷 연결을 확인하고 다시 눌러 주세요.');
+  },20000);
+}
 function mergeTakeCloud(){
   var ref=sync.pendingRef;
   if(!ref){ cancelConnect(); return; }
+  var seq=++mergeSeq;
+  mergeBusy('sync-merge-cloud','☁️ 불러오는 중…'); mergeWatch(seq);
   sync.status='connecting'; sync.err=''; paintCloud();
   ref.get().then(function(snap){
+    if(seq!==mergeSeq) return;
+    clearTimeout(mergeTimer);
     if(!snap.exists){ mergeTakePhone(); return; }
     var data=null;
     try{ data=JSON.parse(String((snap.data()||{}).payload||'null')); }catch(e){}
@@ -3996,14 +4028,18 @@ function mergeTakeCloud(){
     finishConnect(false,ok?'클라우드 기록을 이 폰에 불러왔어요':'클라우드 기록이 이 폰과 같았어요');
     afterMergeUI();
   }).catch(function(err){
+    if(seq!==mergeSeq) return;
     sync.status='off'; sync.err=(err&&err.message)?err.message:'클라우드 기록을 읽지 못했어요';
     paintCloud();
-    toast('클라우드 기록을 읽지 못했어요. 잠시 뒤 다시 시도해 주세요');
+    mergeBusy(null);
+    mergeNote('⚠ 클라우드 기록을 읽지 못했어요 ('+sync.err+'). 잠시 뒤 다시 눌러 주세요.');
   });
 }
 function mergeTakePhone(){
   var ref=sync.pendingRef;
   if(!ref){ cancelConnect(); return; }
+  var seq=++mergeSeq;
+  mergeBusy('sync-merge-phone','📱 올리는 중…'); mergeWatch(seq);
   sync.status='connecting'; sync.err=''; paintCloud();
   try{
     ref.set({
@@ -4011,6 +4047,8 @@ function mergeTakePhone(){
       updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy:sync.deviceId
     }).then(function(){
+      if(seq!==mergeSeq) return;
+      clearTimeout(mergeTimer);
       sync.doc=ref; sync.pendingRef=null;
       sync.lastPush=new Date().toISOString();
       sync.dirty=false;
@@ -4018,15 +4056,18 @@ function mergeTakePhone(){
       finishConnect(false,'이 폰 기록을 클라우드에 올렸어요');
       afterMergeUI();
     },function(err){
+      if(seq!==mergeSeq) return;
       sync.status='off'; sync.err=(err&&err.message)?err.message:'클라우드에 올리지 못했어요';
       paintCloud();
-      toast('클라우드에 올리지 못했어요. 이 폰 기록은 그대로 있어요');
+      mergeBusy(null);
+      mergeNote('⚠ 클라우드에 올리지 못했어요 ('+sync.err+'). 이 폰 기록은 그대로 있어요.');
     });
   }catch(e){
     sync.status='off'; sync.err='클라우드에 올리지 못했어요'; paintCloud();
   }
 }
 function cancelConnect(reopen){
+  mergeSeq++; clearTimeout(mergeTimer);
   sync.pendingRef=null; sync.doc=null; sync.code=''; sync.status='off'; sync.err='';
   writeSyncMeta('');
   paintCloud();
