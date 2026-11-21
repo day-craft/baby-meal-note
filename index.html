@@ -606,7 +606,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.21k';
+var APP_VERSION='2026.11.21l';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -2987,14 +2987,21 @@ function packPickHTML(e){
   if(!state.stock.length){
     return '<p class="sheet-note" style="margin:0 0 14px">냉장·재고 탭에 팩을 먼저 추가하면 여기서 연결할 수 있어요.</p>';
   }
-  var list=state.stock.slice().sort(function(a,b){
-    if(a.status!==b.status) return a.status==='arrived'?-1:1;
-    return String(a.expected||a.arrived||'').localeCompare(String(b.expected||b.arrived||''));
-  });
+  /* 다 먹은 팩(0팩)은 빼요. 이미 이 식단에 연결된 팩만 '다 먹음'으로 남겨 둬요 */
+  var live=state.stock.filter(function(s){ return s.qty>0||!!s.opened||chosen.indexOf(s.id)>=0; });
+  var hiddenN=state.stock.length-live.length;
+  var arrived=sortFridge(live.filter(function(s){ return s.status!=='expected'; }));
+  var expected=live.filter(function(s){ return s.status==='expected'; })
+    .sort(function(a,b){ return cmpStr(a.expected||'9999-12-31',b.expected||'9999-12-31')||String(a.name).localeCompare(String(b.name),'ko'); });
+  var list=arrived.concat(expected);
+  if(!list.length){
+    return '<p class="sheet-note" style="margin:0 0 14px">연결할 수 있는 팩이 없어요. 남은 팩은 모두 다 먹었어요.</p>';
+  }
   return '<div class="packpick" id="packPick">'+list.map(function(s){
     var on=chosen.indexOf(s.id)>=0;
     var sub;
     if(s.status==='expected') sub='도착 예정'+(s.expected?' '+mdShort(s.expected):'');
+    else if(!(s.qty>0)&&!s.opened) sub='다 먹음';
     else sub=(s.opened?'개봉 '+mdShort(s.opened):'냉장')+' · '+s.qty+'팩';
     var used=state.entries.filter(function(x){ return (!e||x.id!==e.id)&&packIdsOf(x).indexOf(s.id)>=0; });
     if(used.length) sub='사용 중 '+mdShort(used[0].start)+'~'+mdShort(used[0].end);
@@ -3002,7 +3009,8 @@ function packPickHTML(e){
       '<input type="checkbox" data-pack="'+esc(s.id)+'"'+(on?' checked':'')+'>'+
       '<span>'+esc(s.name)+' <span style="color:#8D8277;font-weight:700">'+s.size+'g</span></span>'+
       '<span class="pk-sub">'+esc(sub)+'</span></label>';
-  }).join('')+'</div>';
+  }).join('')+'</div>'+
+  (hiddenN?'<p class="sheet-note" style="margin:-6px 0 12px;font-size:11.5px">다 먹은 팩 '+hiddenN+'개는 목록에서 뺐어요.</p>':'');
 }
 
 function mpdHintText(v,slot){
