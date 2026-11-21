@@ -558,7 +558,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.21c';
+var APP_VERSION='2026.11.21d';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -1920,9 +1920,35 @@ function packEndAdvice(s,e){
   return {done:false, remaining:u.remaining, next:next, limit:lim};
 }
 
+/* ───────── 재고 정렬: '다음에 쓸 순서' ─────────
+   이 팩 재료가 들어간 식단 중 오늘 이후 가장 먼저 쓰는 날 (없으면 맨 뒤) */
+function packNextUse(s){
+  var t=todayISO(), core=coreName(s.name,s.brand), best='9999-12-31';
+  state.entries.forEach(function(e){
+    if(e.end<t||!sameBrand(s.brand,e.brand)) return;
+    if(!entryCores(e).some(function(o){ return o.core===core; })) return;
+    var d=e.start<t?t:e.start;
+    if(d<best) best=d;
+  });
+  return best;
+}
+function cmpStr(a,b){ return a<b?-1:(a>b?1:0); }
+function sortFridge(list){
+  var memo={};
+  function nu(s){ return memo[s.id]||(memo[s.id]=packNextUse(s)); }
+  return list.slice().sort(function(a,b){
+    if(!!a.opened!==!!b.opened) return a.opened?-1:1;                 /* 개봉 중 먼저 */
+    return cmpStr(nu(a),nu(b))                                          /* 곧 먹을 식단에 쓰일 팩 */
+      ||cmpStr(a.expiryDate||'9999-12-31',b.expiryDate||'9999-12-31')   /* 유통기한 임박 */
+      ||cmpStr(a.arrived||'9999-12-31',b.arrived||'9999-12-31')         /* 먼저 도착한 팩 */
+      ||String(a.name).localeCompare(String(b.name),'ko');
+  });
+}
+
 function renderStock(){
   var t=todayISO();
-  var opened=state.stock.filter(function(s){ return !!s.opened&&s.qty>0; });
+  var opened=state.stock.filter(function(s){ return !!s.opened&&s.qty>0; })
+    .sort(function(a,b){ return cmpStr(packLimitDate(a),packLimitDate(b))||String(a.name).localeCompare(String(b.name),'ko'); });
   var warn='<div class="sec-head"><span class="sec-title">개봉 중 · D-day</span><span class="sec-sub">개봉일 포함 3일 안에</span></div>';
   if(!opened.length){
     warn+='<div class="card" style="color:#797465;font-size:12.5px;line-height:1.5">지금 개봉 중인 팩이 없어요.<br>팩을 뜯으면 <b>개봉일 기록</b>을 눌러 D-day를 켜 두세요.</div>';
@@ -1966,13 +1992,14 @@ function renderStock(){
 
   var arrived=state.stock.filter(function(s){ return s.status==='arrived'; });
   var expected=state.stock.filter(function(s){ return s.status==='expected'; })
-    .sort(function(a,b){ return String(a.expected).localeCompare(String(b.expected)); });
+    .sort(function(a,b){ return cmpStr(a.expected||'9999-12-31',b.expected||'9999-12-31')||String(a.name).localeCompare(String(b.name),'ko'); });
 
   var html=warn;
   html+='<div class="sec-head"><span class="sec-title">보유 · 냉장고</span><span class="sec-sub">'+sumQty(arrived)+'팩</span></div>';
   /* 다 먹은 팩(0팩·개봉 안 함)은 아래에 접어 둬요 */
-  var inFridge=arrived.filter(function(s){ return s.qty>0||!!s.opened; });
-  var emptied=arrived.filter(function(s){ return !(s.qty>0||!!s.opened); });
+  var inFridge=sortFridge(arrived.filter(function(s){ return s.qty>0||!!s.opened; }));
+  var emptied=arrived.filter(function(s){ return !(s.qty>0||!!s.opened); })
+    .sort(function(a,b){ return cmpStr(b.finishedOn||'',a.finishedOn||'')||String(a.name).localeCompare(String(b.name),'ko'); });
   html+=inFridge.length?inFridge.map(itemHTML).join(''):'<div class="card" style="color:#797465;font-size:12.5px">보유 중인 팩이 없어요.</div>';
   if(emptied.length){
     html+='<details class="fold"><summary>🗂 다 먹은 팩 '+emptied.length+'개 <span class="chev">▾</span></summary>'+
