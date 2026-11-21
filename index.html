@@ -304,6 +304,20 @@ details[open] .chev{transform:rotate(180deg)}
 .pd-row{display:flex;align-items:center;gap:9px;margin:9px 0 0;padding-top:9px;border-top:1px dashed #EFD9C8;font-size:13px;color:#5F544A}
 .pd-row b{color:#3F3A33}
 .pd-row input{accent-color:#E57F63;width:18px;height:18px;flex:none}
+.puse{margin:2px 0 14px;padding:12px;border-radius:14px;background:#FBF4EC;border:1px solid #F2E3D5}
+.puse-head{font-size:13px;font-weight:800;color:#5F544A;margin-bottom:8px}
+.puse-head small{font-weight:600;color:#8A7766;margin-left:4px}
+.puse-ratio{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;font-size:12px;color:#8A7766;font-weight:700}
+.puse-ratio button{font-family:inherit;font-size:12px;font-weight:800;color:#877A6C;background:#fff;border:1px solid #EEDCCB;border-radius:999px;padding:5px 11px;cursor:pointer}
+.puse-ratio button.on{background:var(--coral-soft);color:var(--coral-d);border-color:#F2C9B5}
+.puse-row{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13px;color:#3F3A33;font-weight:700}
+.puse-row span{flex:1;min-width:0}
+.puse-row input{width:84px;font-family:inherit;font-size:16px;padding:7px 9px;border:1px solid #EAD9C8;border-radius:10px;background:#fff;text-align:right}
+.puse-row em{font-style:normal;color:#8A7766;font-weight:700}
+.puse-sum{margin:8px 0 0;font-size:12px;color:#6F5F52;font-weight:600;line-height:1.5;word-break:keep-all}
+.puse-sum b{color:#B8523A}
+.pd-row small{font-size:11.5px;color:#8A7766;font-weight:600}
+.dday-eat .warn{color:#B0452F;font-weight:800}
 .pd-row em{font-style:normal;font-weight:800;color:#B8523A;margin-left:2px}
 .alert-foot{margin:8px 0 0;font-size:11px;color:#817565}
 .ing-alert .ing-suggest{margin-top:8px}
@@ -539,7 +553,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.20b';
+var APP_VERSION='2026.11.21';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -721,6 +735,9 @@ function normalize(s){
       var recDg=dailyGramsFit(e.dailyGrams, rec.start, rec.end);
       if(recDg) rec.dailyGrams=recDg;
       if(isDate(e.packsDone)) rec.packsDone=e.packsDone;   /* 이 식단의 다 먹은 팩 정리를 마친 날 */
+      var pr=cleanUseMap(e.packRatio,10), pg=cleanUseMap(e.packGrams,MAX_GRAMS);
+      if(pr) rec.packRatio=pr;      /* 팩(재료)별 비율 {한우:2, 감자:1} — 없으면 1:1 */
+      if(pg) rec.packGrams=pg;      /* 팩(재료)별 한 끼에 덜어 쓰는 g을 직접 적은 경우 */
       out.entries.push(rec);
     });
   } else {
@@ -904,6 +921,22 @@ function getEntryTargetGrams(e,date){
     if(v!=null&&v!=='') return String(v);
   }
   return (e.grams==null?'':String(e.grams));
+}
+/* {재료: 숫자} 정리 — 0보다 크고 max 이하인 숫자만, 비면 null */
+function cleanUseMap(m,max){
+  if(!m||typeof m!=='object'||Array.isArray(m)) return null;
+  var out={}, n=0;
+  Object.keys(m).forEach(function(k){
+    var v=Number(m[k]);
+    if(String(k).length&&String(k).length<=30&&isFinite(v)&&v>0&&v<=max){ out[String(k)]=Math.round(v*10)/10; n++; }
+  });
+  return n?out:null;
+}
+/* '45~50' → 47.5 (덜어 쓰는 양은 가운데 값으로), '50' → 50, '' → null */
+function gramsMid(v){
+  var parts=String(v==null?'':v).split('~').map(function(x){ return Number(String(x).trim()); }).filter(function(x){ return isFinite(x)&&x>0; });
+  if(!parts.length) return null;
+  return parts.length>1?(parts[0]+parts[1])/2:parts[0];
 }
 /* '45~50' → 45, '50' → 50, '' → null */
 function gramsBaseNum(v){
@@ -1111,14 +1144,23 @@ function packDoneHTML(){
   return packDoneCandidates().map(function(x){
     var e=x.e;
     var rows=x.p.picks.map(function(pk){
-      var s=pk.pack, after=s.qty-1;
-      return '<label class="check pd-row"><input type="checkbox" data-pd="'+e.id+'" data-sid="'+s.id+'" checked>'+
-        '<span><b>'+esc(s.name)+'</b> '+s.qty+'팩 → '+after+'팩'+(after<=0?' <em>다 먹음</em>':'')+'</span></label>';
+      var s=pk.pack, after=s.qty-1, adv=packEndAdvice(s,e);
+      if(adv.done){
+        return '<label class="check pd-row"><input type="checkbox" data-pd="'+e.id+'" data-sid="'+s.id+'" checked>'+
+          '<span><b>'+esc(s.name)+'</b> '+s.qty+'팩 → '+after+'팩'+(after<=0?' <em>다 먹음</em>':' <em>다 씀</em>')+'</span></label>';
+      }
+      /* 팩이 꽤 남았을 때: 다음 식단에 이어 쓸 수 있으면 기본은 '이어 쓰기'(체크 해제) */
+      var keep=!!adv.next;
+      var why=keep?mdShort(adv.next.start)+' '+esc(adv.next.short||adv.next.menu)+'에 이어 쓸 수 있어요'
+        :'냉장 기한('+mdShort(adv.limit)+') 안에 이 재료 식단이 없어요';
+      return '<label class="check pd-row"><input type="checkbox" data-pd="'+e.id+'" data-sid="'+s.id+'"'+(keep?'':' checked')+'>'+
+        '<span><b>'+esc(s.name)+'</b> 약 '+adv.remaining+'g 남음 · '+why+
+        '<br><small>체크하면 남은 양을 버리고 '+s.qty+'팩 → '+after+'팩</small></span></label>';
     }).join('');
     return '<div class="alert-card pd-card">'+
       '<div class="alert-head"><span>📦 '+esc(e.short||e.menu)+' 식단을 다 먹었어요</span>'+
         '<button type="button" class="linkbadge" data-act="plan-link" data-date="'+e.start+'">'+mdShort(e.start)+'~'+mdShort(e.end)+'</button></div>'+
-      '<p class="alert-text">쓴 팩을 재고에서 줄일까요? 남은 팩은 체크를 풀어 주세요.</p>'+
+      '<p class="alert-text">쓴 팩을 재고에서 줄일까요? 체크한 팩만 줄이고, 체크를 푼 팩은 개봉 중으로 남겨 이어 써요.</p>'+
       rows+
       (x.p.guessed?'<p class="alert-foot">이름으로 찾은 팩이에요. 다르면 체크를 풀어 주세요.</p>':'')+
       '<div class="ing-suggest-btns" style="margin-top:10px">'+
@@ -1316,6 +1358,11 @@ function cloneEntry(e){
     mealsPerDay:mealsPerDayOf(e), packId:(pids[0]||null), packIds:pids};
   var dg=entryDailyGrams(e);
   if(dg) out.dailyGrams=dg;
+  /* 선택 필드도 함께 복사 (빠뜨리면 일정 수정 때 조용히 사라져요) */
+  if(isDate(e.packsDone)) out.packsDone=e.packsDone;
+  var pr=cleanUseMap(e.packRatio,10), pg=cleanUseMap(e.packGrams,MAX_GRAMS);
+  if(pr) out.packRatio=pr;
+  if(pg) out.packGrams=pg;
   return out;
 }
 /* 저장된 먹인 기록(state.logs)의 날짜 키를 일정과 함께 이동.
@@ -1776,34 +1823,93 @@ function itemHTML(s){
   '</div>';
 }
 
-/* 개봉 중인 팩에서 먹은 양: 개봉일부터 오늘까지, 이 팩 재료가 든 식단의 먹인 기록을 더해요.
-   믹스(한우감자 1:1)는 재료 수만큼 나눠서 계산해요. g이 비어 있으면 목표량 × 먹은 정도로 어림해요. */
-var AMT_RATIO={full:1, half:0.5, little:0.25, refuse:0, skip:0};
-function packEaten(s){
-  var t=todayISO(), core=coreName(s.name,s.brand), grams=0, entry=null;
-  if(!s.opened) return {grams:0, entry:null, days:0, total:0};
+/* ───────── 팩에서 덜어 쓰는 양 ─────────
+   · 식단마다 재료(팩)별 한 끼 사용량 = 직접 적은 g, 없으면 한 끼 목표량 × 비율(기본 1:1)
+   · 덜어 쓴 양은 '덜어낸 양' 기준: 기록된 끼니(완식·절반·조금·거부)마다 사용량만큼 빠지고, 쉬어감은 안 빠져요 */
+function entryCores(e){
+  var out=[];
+  entryStockFor(e).packs.forEach(function(x){
+    var c=coreName(x.name,x.brand);
+    if(c&&!out.some(function(o){ return o.core===c; })) out.push({core:c, name:x.name, size:x.size||0});
+  });
+  return out;
+}
+function entryShareFor(e,core,date,cores){
+  if(e.packGrams&&Number(e.packGrams[core])>0) return Number(e.packGrams[core]);
+  cores=cores||entryCores(e);
+  var total=gramsMid(getEntryTargetGrams(e,date))||0;
+  if(!total||!cores.length) return 0;
+  var sum=0, w=1;
+  cores.forEach(function(o){
+    var x=(e.packRatio&&Number(e.packRatio[o.core])>0)?Number(e.packRatio[o.core]):1;
+    sum+=x; if(o.core===core) w=x;
+  });
+  return total*w/(sum||1);
+}
+/* 그날 덜어낸 끼니 수 (쉬어감 제외) */
+function dayMealsUsed(date){
+  var lg=state.logs[date];
+  if(!lg) return 0;
+  return logSlots(lg).filter(function(x){ return x.slot&&x.slot.amount&&x.slot.amount!=='skip'; }).length;
+}
+function packLimitDate(s){
+  if(!s.opened) return '';
+  var lim=addDays(s.opened, Math.max(1,s.shelfLife||3)-1);
+  if(s.expiryDate&&s.expiryDate<lim) lim=s.expiryDate;
+  return lim;
+}
+/* 개봉 중인 팩: 덜어 쓴 양 · 남은 양 · 앞으로 다 쓰는 날(또는 냉장 기한까지 남는 양) */
+function packUsage(s){
+  var t=todayISO(), core=coreName(s.name,s.brand), size=Math.max(0,s.size||0);
+  var res={used:0, remaining:size, size:size, entry:null, days:0, total:0, perDay:0, runOut:'', leftAtLimit:0, limit:packLimitDate(s), noMore:false};
+  if(!s.opened) return res;
+  var used=0, lastE=null;
   for(var d=s.opened; d<=t; d=addDays(d,1)){
-    var e=entryForDate(d), lg=state.logs[d];
-    if(!e) continue;
-    var cores=[];
-    entryStockFor(e).packs.forEach(function(x){ var c=coreName(x.name,x.brand); if(cores.indexOf(c)<0) cores.push(c); });
-    if(cores.indexOf(core)<0) continue;
-    entry=e;
-    if(!lg) continue;
-    logSlots(lg).forEach(function(x){
-      var sl=x.slot; if(!sl||sl.amount==='skip') return;
-      var g=Number(sl.grams);
-      if(!(g>0)) g=(Number(getEntryTargetGrams(e,d))||0)*(AMT_RATIO[sl.amount]||0);
-      grams+=g/cores.length;
-    });
+    var e=entryForDate(d); if(!e) continue;
+    var cores=entryCores(e);
+    if(!cores.some(function(o){ return o.core===core; })) continue;
+    lastE=e;
+    used+=dayMealsUsed(d)*entryShareFor(e,core,d,cores);
   }
-  /* 그 식단 기준 진행: 며칠 중 며칠 먹였는지 */
-  var days=0, total=0;
-  if(entry){
-    total=diffDays(entry.start,entry.end)+1;
-    for(var d2=entry.start; d2<=entry.end&&d2<=t; d2=addDays(d2,1)) if(logHasEaten(state.logs[d2])) days++;
+  res.used=Math.round(used);
+  res.remaining=Math.max(0,Math.round(size-used));
+  res.entry=lastE;
+  if(lastE){
+    res.total=diffDays(lastE.start,lastE.end)+1;
+    for(var d2=lastE.start; d2<=lastE.end&&d2<=t; d2=addDays(d2,1)) if(logHasEaten(state.logs[d2])) res.days++;
   }
-  return {grams:Math.round(grams), entry:entry, days:days, total:total};
+  /* 앞으로: 오늘 남은 끼니 + 이후 식단 계획으로 언제 다 쓰는지 */
+  var left=size-used, lim=res.limit, any=false;
+  for(var d3=t; d3<=addDays(t,30); d3=addDays(d3,1)){
+    var e3=entryForDate(d3); if(!e3) continue;
+    var c3=entryCores(e3);
+    if(!c3.some(function(o){ return o.core===core; })) continue;
+    var meals=mealsPerDayOf(e3)-(d3===t?dayMealsUsed(d3):0);
+    if(meals<=0) continue;
+    var per=entryShareFor(e3,core,d3,c3);
+    if(!res.perDay) res.perDay=Math.round(per*mealsPerDayOf(e3));
+    if(lim&&d3>lim) break;
+    any=true;
+    left-=meals*per;
+    if(left<=0.5){ res.runOut=d3; break; }
+  }
+  if(!res.runOut){
+    res.leftAtLimit=Math.max(0,Math.round(left));
+    res.noMore=!any;
+  }
+  return res;
+}
+/* 정리 카드용: 식단이 끝났을 때 이 팩을 어떻게 할지 제안 */
+function packEndAdvice(s,e){
+  if(!s.opened) return {done:true};          /* 개봉 기록이 없으면 예전처럼 다 쓴 것으로 */
+  var u=packUsage(s), small=Math.max(5,Math.round((u.size||0)*0.1));
+  if(u.remaining<=small) return {done:true, remaining:u.remaining};
+  var core=coreName(s.name,s.brand), next=null, lim=u.limit;
+  state.entries.slice().sort(function(a,b){ return a.start<b.start?-1:1; }).forEach(function(x){
+    if(next||x.start<=e.end||(lim&&x.start>lim)) return;
+    if(entryCores(x).some(function(o){ return o.core===core; })) next=x;
+  });
+  return {done:false, remaining:u.remaining, next:next, limit:lim};
 }
 
 function renderStock(){
@@ -1823,14 +1929,18 @@ function renderStock(){
       var left=diffDays(t,limit);
       var cls=left<0?'over':(left<=1?'urgent':(left<=2?'warn':''));
       var lab=left<0?'기한 지남':(left===0?'오늘까지':'D-'+left);
-      /* 막대 = 이 팩에서 먹은 양 (먹인 기록 기준). 냉장 기한은 오른쪽 D-day로 */
-      var pe=packEaten(s), size=Math.max(1,s.size||0);
-      var used=Math.min(1,pe.grams/size);
-      var leftG=Math.max(0,size-pe.grams);
-      var eatLine=pe.grams>0
-        ?'먹은 양 <b>'+pe.grams+'g</b> / '+size+'g · 남은 약 '+leftG+'g'
-        :'아직 이 팩으로 먹인 기록이 없어요';
-      if(pe.entry&&pe.total>1) eatLine+=' · <span style="white-space:nowrap">'+esc(pe.entry.short||pe.entry.menu)+' '+pe.days+'/'+pe.total+'일</span>';
+      /* 막대 = 이 팩에서 덜어 쓴 양 (기록한 끼니 × 식단의 팩 사용량). 냉장 기한은 오른쪽 D-day로 */
+      var pu=packUsage(s), size=Math.max(1,s.size||0);
+      var used=Math.min(1,pu.used/size);
+      var eatLine=pu.used>0
+        ?'덜어 쓴 양 <b>'+pu.used+'g</b> / '+size+'g · 남은 약 '+pu.remaining+'g'
+        :'아직 이 팩에서 덜어 쓴 기록이 없어요';
+      if(pu.entry&&pu.total>1) eatLine+=' · <span style="white-space:nowrap">'+esc(pu.entry.short||pu.entry.menu)+' '+pu.days+'/'+pu.total+'일</span>';
+      var planLine='';
+      if(pu.runOut) planLine=(pu.perDay?'하루 '+pu.perDay+'g씩 · ':'')+(pu.runOut===t?'오늘 다 써요':mdShort(pu.runOut)+'에 다 써요');
+      else if(pu.remaining>0&&pu.noMore) planLine='앞으로 이 재료 식단이 없어요 · 약 '+pu.leftAtLimit+'g 남아요';
+      else if(pu.remaining>0&&pu.leftAtLimit>0) planLine='<span class="warn">냉장 기한('+mdShort(pu.limit)+')까지 약 '+pu.leftAtLimit+'g 남아요</span>';
+      if(planLine) eatLine+='<br>'+planLine;
       return '<div class="dday '+cls+'">'+
         '<div class="dday-main">'+
           '<div class="dday-name">'+esc(s.name)+'<span class="tag">'+s.size+'g</span></div>'+
@@ -2578,6 +2688,7 @@ function openEntrySheet(id, presetDate){
     '<label class="field">메모<textarea id="fNote" rows="2" placeholder="소분 방법, 관찰 포인트">'+esc(e?e.note:'')+'</textarea></label>'+
     '<div class="field" style="margin-bottom:6px">연결할 재고 팩 <span style="font-weight:700;color:#8D8277">(여러 개 선택 가능)</span></div>'+
     packPickHTML(e)+
+    '<div id="packUseBox"></div>'+
     (e?'<label class="check hidden" id="followWrap" style="margin:0 0 4px"><input type="checkbox" id="fFollow"> <span id="followLabel">이후 일정도 같이 조정</span></label>'+
       '<p class="sheet-note hidden" id="followNote" style="margin:0 0 10px"></p>':'')+
     '<p class="sheet-note err hidden" id="entryErr"></p>'+
@@ -2611,7 +2722,70 @@ function openEntrySheet(id, presetDate){
       if(!inp||!inp.getAttribute||!inp.getAttribute('data-pack')) return;
       var lab=inp.closest?inp.closest('.packchip'):null;
       if(lab) lab.classList.toggle('on', !!inp.checked);
+      renderPackUse();
     });
+    /* ── 팩에서 덜어 쓰는 양: 비율(기본 1:1) 자동 + 팩별 g 직접 수정 ── */
+    var useBox=root.querySelector('#packUseBox');
+    var useRatio=Object.assign({}, (e&&e.packRatio)||{});
+    var useGrams=Object.assign({}, (e&&e.packGrams)||{});
+    function formEntry(){
+      var ids=[];
+      Array.prototype.forEach.call(root.querySelectorAll('#packPick input[data-pack]'),function(b){ if(b.checked) ids.push(b.getAttribute('data-pack')); });
+      var sv=(root.querySelector('#fStart')||{}).value, ev2=(root.querySelector('#fEnd')||{}).value;
+      return {id:e?e.id:'_new', menu:(root.querySelector('#fMenu').value||'').trim(), brand:(root.querySelector('#fBrand').value||'').trim(),
+        grams:(root.querySelector('#fGrams').value||'').trim(), packIds:ids, packId:ids[0]||null,
+        start:isDate(sv)?sv:start, end:isDate(ev2)?ev2:end, mealsPerDay:mpd, packRatio:useRatio, packGrams:useGrams};
+    }
+    function useSummary(fe,cores){
+      var days=Math.max(1,diffDays(fe.start,fe.end)+1), meals=days*mealsPerDayOf(fe);
+      var parts=cores.map(function(o){
+        var per=entryShareFor(fe,o.core,fe.start,cores), tot=Math.round(per*meals);
+        var left=o.size?Math.round(o.size-tot):null;
+        return '<b>'+esc(o.core)+'</b> '+tot+'g'+(o.size?(left>=0?' (팩 '+o.size+'g 중 '+left+'g 남음)':' (팩 '+o.size+'g보다 '+(-left)+'g 더 필요)'):'');
+      });
+      return days+'일 · '+meals+'끼 동안 → '+parts.join(' · ');
+    }
+    function renderPackUse(){
+      if(!useBox) return;
+      var fe=formEntry(), cores=entryCores(fe);
+      if(!cores.length){ useBox.innerHTML=''; return; }
+      var ratioKey=cores.length===2?((Number(useRatio[cores[0].core])||1)+':'+(Number(useRatio[cores[1].core])||1)):'';
+      var chips=cores.length===2?'<div class="puse-ratio"><span>'+esc(cores[0].core)+' : '+esc(cores[1].core)+'</span>'+
+        ['1:1','2:1','1:2'].map(function(k){ return '<button type="button" data-ratio="'+k+'" class="'+(k===ratioKey&&!Object.keys(useGrams).length?'on':'')+'">'+k.replace(':',' : ')+'</button>'; }).join('')+'</div>':'';
+      useBox.innerHTML='<div class="puse"><div class="puse-head">팩에서 덜어 쓰는 양 <small>한 끼 기준 · 비우면 자동</small></div>'+chips+
+        cores.map(function(o){
+          var auto=Math.round(entryShareFor({grams:fe.grams,packRatio:useRatio,packIds:fe.packIds,menu:fe.menu,brand:fe.brand},o.core,fe.start,cores)*10)/10;
+          var v=Number(useGrams[o.core])>0?useGrams[o.core]:'';
+          return '<label class="puse-row"><span>'+esc(o.name)+'</span>'+
+            '<input type="number" inputmode="decimal" min="0" max="'+MAX_GRAMS+'" step="0.5" data-core="'+esc(o.core)+'" value="'+esc(v)+'" placeholder="'+(auto||'')+'"><em>g</em></label>';
+        }).join('')+
+        '<p class="puse-sum" id="puseSum">'+useSummary(fe,cores)+'</p></div>';
+    }
+    if(useBox){
+      useBox.addEventListener('click',function(ev){
+        var b=ev.target.closest?ev.target.closest('[data-ratio]'):null;
+        if(!b) return;
+        var cores=entryCores(formEntry()); if(cores.length!==2) return;
+        var r=b.getAttribute('data-ratio').split(':');
+        useRatio={}; useGrams={};
+        if(r[0]!==r[1]){ useRatio[cores[0].core]=Number(r[0]); useRatio[cores[1].core]=Number(r[1]); }
+        renderPackUse();
+      });
+      useBox.addEventListener('input',function(ev){
+        var c=ev.target&&ev.target.getAttribute&&ev.target.getAttribute('data-core');
+        if(!c) return;
+        var v=Number(ev.target.value);
+        if(ev.target.value!==''&&isFinite(v)&&v>0) useGrams[c]=v; else delete useGrams[c];
+        var fe=formEntry(), sm=root.querySelector('#puseSum');
+        if(sm) sm.innerHTML=useSummary(fe,entryCores(fe));
+        Array.prototype.forEach.call(useBox.querySelectorAll('[data-ratio]'),function(x){ x.classList.remove('on'); });
+      });
+    }
+    ['#fMenu','#fBrand','#fGrams','#fStart','#fEnd'].forEach(function(sel){
+      var el=root.querySelector(sel); if(el) el.addEventListener('input',function(){ renderPackUse(); });
+    });
+    if(mealSeg) mealSeg.addEventListener('click',function(){ setTimeout(renderPackUse,0); });
+    renderPackUse();
     /* ── 날짜별 목표 용량(dailyGrams) ── */
     var dgBox=root.querySelector('#dgBox');
     var dgRows=root.querySelector('#dgRows');
@@ -2789,6 +2963,13 @@ function openEntrySheet(id, presetDate){
       };
       if(dgOut) rec.dailyGrams=dgOut;
       if(e&&e.packsDone) rec.packsDone=e.packsDone;
+      /* 팩 사용량: 지금 이 식단에 해당하는 재료만, 1:1이면 저장 안 함 */
+      var recCores=entryCores(rec).map(function(o){ return o.core; });
+      var rr={}, rg={};
+      recCores.forEach(function(c){ if(useRatio[c]) rr[c]=useRatio[c]; if(useGrams[c]) rg[c]=useGrams[c]; });
+      var rv=Object.keys(rr).map(function(k){ return rr[k]; });
+      if(rv.length&&!rv.every(function(v){ return v===rv[0]; })) { var cr=cleanUseMap(rr,10); if(cr) rec.packRatio=cr; }
+      var cg=cleanUseMap(rg,MAX_GRAMS); if(cg) rec.packGrams=cg;
       var oldEnd=e?e.end:'';
       var delta=e?diffDays(oldEnd,en):0;
       var follow=e?laterWillFollow(delta):false;
@@ -2933,6 +3114,7 @@ function openStockSheet(id,copyId){
         note:(root.querySelector('#fNote').value||'').trim()
       };
       if(s&&s.autoOpened&&rec.opened===s.opened) rec.autoOpened=true;
+      if(s&&isDate(s.finishedOn)) rec.finishedOn=s.finishedOn;
       if(rec.status==='arrived'&&!isDate(rec.arrived)) rec.arrived=todayISO();
       if(rec.status==='expected'){ rec.opened=''; delete rec.autoOpened; }
       if(s){ state.stock=state.stock.map(function(x){ return x.id===s.id?rec:x; }); }
