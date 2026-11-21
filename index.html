@@ -240,9 +240,11 @@ details[open] .chev{transform:rotate(180deg)}
 .cal-dots{position:absolute;left:0;right:0;bottom:3px;height:4px;display:flex;align-items:center;justify-content:center;gap:3px}
 .cal-dots i{display:block;width:4px;height:4px;border-radius:50%;background:var(--peach-d)}
 .cal-dots i.skip{background:#B9AC9E}
+.cal-dots i.plan{background:transparent;box-shadow:inset 0 0 0 1.2px var(--peach-d)}
+.cal-cell.sel .cal-dots i.plan{background:transparent;box-shadow:inset 0 0 0 1.2px #FFE3D2}
 .cal-cell.sel .cal-dots i{background:#FFE3D2}
 .cal-cell.sel .cal-dots i.skip{background:#EADDD1}
-.cal-legend{display:flex;gap:14px;justify-content:center;margin-top:11px;font-size:10.5px;color:#80756A;font-weight:700}
+.cal-legend{display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:center;margin-top:11px;font-size:10.5px;color:#80756A;font-weight:700}
 .cal-legend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;vertical-align:middle}
 
 /* ── list rows ── */
@@ -556,7 +558,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.21b';
+var APP_VERSION='2026.11.21c';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -1626,12 +1628,14 @@ function cellHTML(dayNum, dateStr, out, t, sel){
   if(dateStr===sel) cls+=' sel';
   var label=e?(e.short||''):'';
   var dots='';
-  if(slots.length){
-    dots='<span class="cal-dots" aria-hidden="true">'+slots.map(function(x){
-      return '<i'+(x.slot.amount==='skip'?' class="skip"':'')+'></i>';
-    }).join('')+'</span>';
+  /* 하루 2식 일정이면 끼니 자리를 두 개: 기록한 끼니 ●, 기록 전 끼니 ○ */
+  var two=!!(e&&mealsPerDayOf(e)===2);
+  if(slots.length||two){
+    var marks=slots.map(function(x){ return '<i'+(x.slot.amount==='skip'?' class="skip"':'')+'></i>'; });
+    if(two) for(var k=slots.length;k<2;k++) marks.push('<i class="plan"></i>');
+    dots='<span class="cal-dots" aria-hidden="true">'+marks.join('')+'</span>';
   }
-  var recTxt=slots.length===2?' 기록 2끼':(slots.length?' 기록 1끼':'');
+  var recTxt=(two?' 하루 2식':'')+(slots.length===2?' 기록 2끼':(slots.length?' 기록 1끼':''));
   return '<button class="'+cls+'" data-act="sel-date" data-date="'+dateStr+'" aria-label="'+mdLong(dateStr)+recTxt+'">'+
     '<span class="cal-d">'+dayNum+'</span>'+
     calLabelHTML(label)+dots+
@@ -1699,6 +1703,7 @@ function calendarHTML(){
       '<span><i style="background:#FFD9C6"></i>예정</span>'+
       '<span><i style="background:#F28A70"></i>기록 완료</span>'+
       '<span><i style="background:#B9AC9E"></i>쉬어감</span>'+
+      '<span><i style="background:transparent;box-shadow:inset 0 0 0 1.5px #E9745B"></i>2식 기록 전</span>'+
     '</div>'+
     '<div class="cal-legend" style="margin-top:3px;color:#978C81;font-size:11px">점 2개 = 오전·오후 두 끼 기록</div>'+
   '</div>';
