@@ -324,6 +324,17 @@ details[open] .chev{transform:rotate(180deg)}
 .pd-row small{font-size:11.5px;color:#8A7766;font-weight:600}
 .dday-eat .warn{color:#B0452F;font-weight:800}
 .pd-row em{font-style:normal;font-weight:800;color:#B8523A;margin-left:2px}
+.alert-group{margin-top:9px;padding-top:9px;border-top:1px dashed #EFD9C8}
+.alert-group-head{font-size:12px;font-weight:800;color:#A9755A}
+.alert-group .alert-row:first-of-type{border-top:0;padding-top:0;margin-top:6px}
+.alert-group .alert-row+.alert-row{margin-top:7px;padding-top:7px;border-top:1px dotted #F1DFD0}
+.warn-fold{background:#FFF9F2;border:1px solid #F4E0CB;border-radius:16px;margin-bottom:9px}
+.warn-fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 14px;font-size:13px;font-weight:800;color:#8A4F38}
+.warn-fold>summary::-webkit-details-marker{display:none}
+.warn-fold>summary .wf-sub{flex:1;min-width:0;font-size:12px;font-weight:700;color:#9A7A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.warn-fold>summary .chev{color:#B39580;transition:transform .2s}
+.warn-fold[open]>summary .chev{transform:rotate(180deg)}
+.warn-fold-body{padding:0 8px 2px}
 .alert-foot{margin:8px 0 0;font-size:11px;color:#817565}
 .ing-alert .ing-suggest{margin-top:8px}
 .ing-suggest{margin-top:10px;border-radius:14px;background:#FDF4EA;border:1px solid #F4E2D0;padding:10px 12px}
@@ -558,7 +569,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.21e';
+var APP_VERSION='2026.11.21f';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -1050,24 +1061,41 @@ function packAlerts(){
       });
     });
     if(!missing.length) return;
-    out.push({e:e, items:missing, guessed:r.guessed, startsIn:diffDays(t,e.start)});
+    /* 같은 재료 팩(한우미음 · 한우미음 특가분)은 한 묶음: 그중 1팩만 와도 돼요 */
+    var groups=[], byCore={};
+    missing.forEach(function(s){
+      var c=coreName(s.name,s.brand)||s.id;
+      if(!byCore[c]){ byCore[c]={core:c, packs:[]}; groups.push(byCore[c]); }
+      byCore[c].packs.push(s);
+    });
+    out.push({e:e, items:missing, groups:groups, guessed:r.guessed, startsIn:diffDays(t,e.start)});
   });
   return out;
 }
-function packAlertsHTML(){
-  var list=packAlerts();
+/* which: 'now'(오늘 먹을 식단만) · 'later'(그 밖) · 없으면 전부 */
+function packAlertsHTML(which){
+  var list=packAlerts().filter(function(a){
+    if(which==='now') return a.startsIn<=0;
+    if(which==='later') return a.startsIn>0;
+    return true;
+  });
   if(!list.length) return '';
   var t=todayISO();
   return list.map(function(a){
     var e=a.e;
     var when=a.startsIn<=0?'오늘 먹을 식단':(a.startsIn===1?'내일 시작':(mdShort(e.start)+' 시작 · D-'+a.startsIn));
-    var rows=a.items.map(function(s){
+    function row(s){
       var st=!s.expected?'도착일 미정':(s.expected<t?mdShort(s.expected)+' 도착 예정이었어요':(s.expected===t?'오늘 도착 예정':mdShort(s.expected)+' 도착 예정'));
       var late=!!(s.expected&&s.expected>e.start);
       return '<div class="alert-row">'+
         '<div class="alert-row-main"><b>'+esc(s.name)+'</b><span'+(late?' class="late"':'')+'>'+esc(st)+(late?' · 식단보다 늦어요':'')+'</span></div>'+
         '<button type="button" class="mini mini-primary" data-act="stock-arrive" data-id="'+s.id+'">도착 처리</button>'+
       '</div>';
+    }
+    var rows=a.groups.map(function(g){
+      if(g.packs.length===1) return row(g.packs[0]);
+      return '<div class="alert-group"><div class="alert-group-head">'+esc(g.core)+' · 아래 '+g.packs.length+'팩 중 1팩만 와도 돼요</div>'+
+        g.packs.map(row).join('')+'</div>';
     }).join('');
     return '<div class="alert-card'+(a.startsIn<=1?' urgent':'')+'">'+
       '<div class="alert-head"><span>📦 팩이 아직 안 왔어요</span>'+
@@ -1554,6 +1582,7 @@ function logBoxHTML(log,e){
   return '<div class="logbox'+(logAllSkip(log)?' logbox-skip':'')+'"><div class="logbox-rows">'+rows+'</div></div>';
 }
 
+var warnFoldOpen=false;
 function renderPlan(){
   var t=todayISO();
   var sel=isDate(state.ui.sel)?state.ui.sel:t;
@@ -1584,8 +1613,11 @@ function renderPlan(){
     var packTxt=packPillText(e);
     body='<div class="hero-kicker">'+esc(e.brand||'이유식')+(total>1?' · '+idx+'/'+total+'일째':'')+'</div>'+
       '<h2 class="hero-menu">'+esc(e.menu)+'</h2>'+
-      '<div class="hero-meta">'+esc(getEntryTargetGrams(e,sel))+'g · '+(mealsPerDayOf(e)===2?'하루 2회':'하루 1회')+
-        (packTxt?' · 🔗 '+esc(packTxt):'')+'</div>'+
+      '<div class="hero-meta">'+[
+          getEntryTargetGrams(e,sel)?esc(getEntryTargetGrams(e,sel))+'g':'',
+          mealsPerDayOf(e)===2?'하루 2회':'하루 1회',
+          packTxt?'🔗 '+esc(packTxt):''
+        ].filter(Boolean).join(' · ')+'</div>'+
       (e.note?'<p class="hero-note">'+esc(e.note)+'</p>':'');
   } else {
     body='<h2 class="hero-menu" style="font-size:17px;margin-top:18px;color:#75705F">이날은 예정된 이유식이 없어요</h2>';
@@ -1609,8 +1641,27 @@ function renderPlan(){
   $('#planMount').innerHTML=(mode==='cal')?calendarHTML():listHTML();
   var pw=$('#planWarnMount');
   if(pw){
-    var warnHtml=packDoneHTML()+packAlertsHTML()+ingAlertsHTML()+backupReminderHTML();
-    pw.innerHTML=warnHtml?'<div style="margin-top:10px">'+warnHtml+'</div>':'';
+    /* 오늘 바로 할 일(다 먹은 팩 정리 · 오늘 먹을 식단의 팩 미도착)은 카드로,
+       나머지는 한 줄로 접어 달력이 밀려나지 않게 해요 */
+    var urgent=packDoneHTML()+packAlertsHTML('now');
+    var parts=[
+      {html:packAlertsHTML('later'), label:'📦 팩 도착 확인'},
+      {html:ingAlertsHTML(), label:'🌱 재료 관찰'},
+      {html:backupReminderHTML(), label:'💾 백업'}
+    ].filter(function(x){ return !!x.html; });
+    var fold='';
+    if(parts.length){
+      var n=0, subs=parts.map(function(x){
+        var k=(x.html.match(/class="alert-card/g)||[]).length||1; n+=k;
+        return x.label+(k>1?' '+k:'');
+      });
+      fold='<details class="warn-fold" id="warnFold"'+(warnFoldOpen?' open':'')+'>'+
+        '<summary>🔔 알림 '+n+'<span class="wf-sub">'+esc(subs.join(' · '))+'</span><span class="chev">▾</span></summary>'+
+        '<div class="warn-fold-body">'+parts.map(function(x){ return x.html; }).join('')+'</div></details>';
+    }
+    pw.innerHTML=(urgent||fold)?'<div style="margin-top:10px">'+urgent+fold+'</div>':'';
+    var wf=document.getElementById('warnFold');
+    if(wf) wf.addEventListener('toggle', function(){ warnFoldOpen=wf.open; });
   }
 }
 
