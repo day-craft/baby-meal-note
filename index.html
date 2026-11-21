@@ -75,7 +75,7 @@ button{font-family:inherit}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px}
 
 /* ── hero (today card) ── */
-.hero{position:relative;overflow:hidden;border-radius:26px;padding:18px;
+.hero{position:relative;overflow:hidden;border-radius:22px;padding:14px 16px;
   background:linear-gradient(155deg,#FFFFFF 0%,#FFFBF6 46%,#FFF2E8 100%);
   border:1px solid #F6E3D4;box-shadow:0 10px 30px rgba(160,112,84,.12)}
 .hero::after{content:"";position:absolute;right:-44px;top:-56px;width:170px;height:170px;border-radius:50%;
@@ -88,17 +88,17 @@ button{font-family:inherit}
 .hero-date-text{font-size:13px;font-weight:800;color:#7A6A5C;padding:0 6px;letter-spacing:-.01em}
 .hero-date-text em{font-style:normal;color:var(--coral-d)}
 .today-chip{margin-left:6px;font-size:11px;font-weight:800;color:var(--coral-d);background:#FCEADE;border:0;border-radius:999px;padding:5px 9px;cursor:pointer}
-.hero-kicker{margin-top:15px;font-size:11.5px;font-weight:800;color:var(--peach-d);letter-spacing:.01em}
-.hero-menu{margin:4px 0 0;font-size:23px;font-weight:800;letter-spacing:-.03em;line-height:1.26;color:#3A342D;word-break:keep-all}
-.hero-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.hero-kicker{margin-top:10px;font-size:11.5px;font-weight:800;color:var(--peach-d);letter-spacing:.01em}
+.hero-menu{margin:2px 0 0;font-size:19px;font-weight:800;letter-spacing:-.03em;line-height:1.26;color:#3A342D;word-break:keep-all}
+.hero-meta{margin-top:4px;font-size:12.5px;font-weight:700;color:#9E6448;word-break:keep-all}
 .meta-pill{font-size:12px;font-weight:700;color:#9E6448;background:#FDF0E4;border-radius:999px;padding:4px 10px}
-.hero-note{margin:10px 0 0;font-size:12.5px;color:#807265;line-height:1.5;word-break:keep-all}
-.hero-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
-.hero-actions .btn{flex:1 1 auto}
+.hero-note{margin:6px 0 0;font-size:12.5px;color:#807265;line-height:1.5;word-break:keep-all}
+.hero-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.hero-actions .btn{flex:1 1 auto;padding:9px 14px;border-radius:12px}
 .empty-msg{margin:20px 0 4px;font-size:14px;font-weight:700;color:#857466;text-align:center;line-height:1.5}
 
 /* ── log summary ── */
-.logbox{margin-top:15px;border-radius:16px;background:#FDF2E9;border:1px solid #F7E1D0;padding:12px 14px}
+.logbox{margin-top:10px;border-radius:14px;background:#FDF2E9;border:1px solid #F7E1D0;padding:8px 12px}
 .logbox-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .logbox-amt{font-size:13.5px;font-weight:800;color:#BF5C42}
 .logbox-skip{background:#F8F1E8;border-color:#F0E3D5}
@@ -466,8 +466,8 @@ details[open] .chev{transform:rotate(180deg)}
   .app{padding:0 24px;padding-bottom:140px}
   .brand h1{font-size:19px}
   .row-side{flex-direction:row;align-items:center}
-  .hero{padding:22px 24px;border-radius:28px}
-  .hero-menu{font-size:26px}
+  .hero{padding:18px 22px;border-radius:24px}
+  .hero-menu{font-size:22px}
   .tabbar{width:420px}
   .sheet-wrap{align-items:center;padding:24px}
   .sheet-panel{border-radius:24px;max-height:86vh;padding-bottom:22px}
@@ -517,12 +517,12 @@ details[open] .chev{transform:rotate(180deg)}
     <section id="view-plan" class="view">
       <div id="heroMount"></div>
       <div id="planWarnMount"></div>
-      <div id="principlesMount" style="margin-top:10px"></div>
       <div class="seg-toggle" id="modeToggle">
         <button data-act="mode" data-mode="cal">월간</button>
         <button data-act="mode" data-mode="list">리스트</button>
       </div>
       <div id="planMount"></div>
+      <div id="principlesMount" style="margin-top:12px"></div>
     </section>
 
     <section id="view-stock" class="view hidden">
@@ -558,7 +558,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.21d';
+var APP_VERSION='2026.11.21e';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -1584,9 +1584,8 @@ function renderPlan(){
     var packTxt=packPillText(e);
     body='<div class="hero-kicker">'+esc(e.brand||'이유식')+(total>1?' · '+idx+'/'+total+'일째':'')+'</div>'+
       '<h2 class="hero-menu">'+esc(e.menu)+'</h2>'+
-      '<div class="hero-meta"><span class="meta-pill">'+esc(getEntryTargetGrams(e,sel))+'g</span>'+
-        '<span class="meta-pill">'+(mealsPerDayOf(e)===2?'하루 2회 · 오전·오후':'하루 1회')+'</span>'+
-        (packTxt?'<span class="meta-pill">🔗 '+esc(packTxt)+'</span>':'')+'</div>'+
+      '<div class="hero-meta">'+esc(getEntryTargetGrams(e,sel))+'g · '+(mealsPerDayOf(e)===2?'하루 2회':'하루 1회')+
+        (packTxt?' · 🔗 '+esc(packTxt):'')+'</div>'+
       (e.note?'<p class="hero-note">'+esc(e.note)+'</p>':'');
   } else {
     body='<h2 class="hero-menu" style="font-size:17px;margin-top:18px;color:#75705F">이날은 예정된 이유식이 없어요</h2>';
