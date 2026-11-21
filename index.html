@@ -609,7 +609,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.21m';
+var APP_VERSION='2026.11.21n';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -1424,9 +1424,9 @@ function ingProgress(g){
   if(!fe) state.entries.forEach(function(e){ if(!fe&&ingMatchesEntry(g,e)&&(!g.first||e.end>=g.first)) fe=e; });
   var need=Math.min(3, fe?diffDays(fe.start,fe.end)+1:3);
   var flagged=[];
-  days.forEach(function(x){ x.flags.forEach(function(f){ flagged.push({date:x.date,key:x.key,text:f.text}); }); });
+  days.forEach(function(x){ x.flags.forEach(function(f){ flagged.push({date:x.date,key:f.key,text:f.text}); }); });
   return {count:days.length, need:need, ready:(g.status==='testing'&&days.length>=need), flagged:flagged, allFlagged:all.reduce(function(a,x){
-    x.flags.forEach(function(f){ a.push({date:x.date,key:x.key,text:f.text}); }); return a; },[])};
+    x.flags.forEach(function(f){ a.push({date:x.date,key:f.key,text:f.text}); }); return a; },[])};
 }
 /* 먹인 기록 저장 시: 미시도 재료가 들어간 식단이면 '관찰중'으로, 첫 시도일도 채움 */
 function autoIngOnLog(date){
@@ -2664,6 +2664,12 @@ function openLogSheet(date){
   var shiftChoice=!shiftedAlready;
   var unshiftChoice=false;
 
+  /* 탭 이름 옆: 그 끼니 식단의 짧은 이름, 계획에 없는 끼니면 '추가' */
+  function slotTabNote(k){
+    var x=entryForSlot(date,k,true);
+    if(x) return x.short||x.menu;
+    return slotEntry[k]?'한 끼 더':'기록만';
+  }
   function slotValueText(d){
     var skip=(d.amount==='skip');
     return (AMT_LABEL[d.amount]||'기록')+(!skip&&d.grams?' '+d.grams+'g':'');
@@ -2696,7 +2702,7 @@ function openLogSheet(date){
   function tabsHTML(){
     return SLOTS.map(function(s){
       return '<button type="button" data-slot="'+s.v+'" class="'+(cur===s.v?'on ':'')+'st-'+slotStateClass(s.v)+'">'+
-        '<span class="st-l">'+s.l+' <em>('+esc(split?(split[s.v].short||split[s.v].menu):s.n)+')</em></span>'+
+        '<span class="st-l">'+s.l+' <em>('+esc(slotTabNote(s.v))+')</em></span>'+
         '<span class="st-s">'+esc(slotStateText(s.v))+'</span></button>';
     }).join('');
   }
@@ -3453,9 +3459,15 @@ function openEntrySheet(id, presetDate, presetSlot){
       });
     });
     dgSync();
+    /* 이 식단 뒤에 오는 일정: 다음 날 이후 시작 + 마지막 날 오전까지인 식단 바로 뒤 '그날 오후부터' 식단 */
+    function isLaterEntry(x){
+      if(!e||x.id===e.id) return false;
+      if(x.start>e.end) return true;
+      return x.start===e.end&&entrySlotsOn(e,e.end).indexOf('pm')<0&&entrySlotsOn(x,x.start).join()==='pm'&&!(mate&&x.id===mate.id);
+    }
     function laterList(){
       if(!e) return [];
-      return state.entries.filter(function(x){ return x.id!==e.id&&x.start>e.end; });
+      return state.entries.filter(isLaterEntry);
     }
     function syncFollow(){
       if(!e||!fWrap||!fBox) return;
@@ -3558,9 +3570,10 @@ function openEntrySheet(id, presetDate, presetSlot){
       next.push(cloneEntry(rec));
       var moved=0;
       if(follow){
+        var laterIds=laterList().map(function(x){ return x.id; });
         next.forEach(function(x){
           if(x.id===rec.id) return;
-          if(x.start>oldEnd){
+          if(laterIds.indexOf(x.id)>=0){
             var from=x.start;
             x.start=addDays(x.start,delta); x.end=addDays(x.end,delta);
             shiftDailyGrams(x,from,delta);
