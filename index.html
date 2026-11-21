@@ -335,6 +335,19 @@ details[open] .chev{transform:rotate(180deg)}
 .warn-fold>summary .chev{color:#B39580;transition:transform .2s}
 .warn-fold[open]>summary .chev{transform:rotate(180deg)}
 .warn-fold-body{padding:0 8px 2px}
+.bal-body{padding:0 14px 10px}
+.bal-row{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;line-height:1.45;color:#5E554C;padding:6px 0;border-top:1px dashed #EFD9C8}
+.bal-row:first-child{border-top:0}
+.bal-row b{color:#3F3A33}
+.bal-ic{flex:0 0 16px;text-align:center}
+.bal-short{color:#9A3F2B}.bal-short b{color:#9A3F2B}
+.bal-wait{color:#8A6A3A}
+.bal-ok .bal-ic{color:#5E9A6A;font-weight:800}
+.bal-box{margin-top:8px;padding:8px 10px;border-radius:12px;background:#FFFDF9;border:1px solid #F1E2D3}
+.bal-box.flash{animation:balflash 1.2s ease 2}
+@keyframes balflash{50%{background:#FCE3D9;border-color:#EEB9A6}}
+.bal-title{font-size:12px;font-weight:800;color:#8A4F38;margin-bottom:2px}
+.bal-title small{font-weight:700;color:#A0917F;font-size:11px}
 .alert-foot{margin:8px 0 0;font-size:11px;color:#817565}
 .ing-alert .ing-suggest{margin-top:8px}
 .ing-suggest{margin-top:10px;border-radius:14px;background:#FDF4EA;border:1px solid #F4E2D0;padding:10px 12px}
@@ -569,7 +582,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.21f';
+var APP_VERSION='2026.11.21g';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -1904,6 +1917,83 @@ function entryShareFor(e,core,date,cores){
   });
   return total*w/(sum||1);
 }
+/* ───────── 재료별 '앞으로 필요한 양' vs 재고 ─────────
+   오늘 이후 아직 기록 안 한 끼니 × 그 식단의 재료별 덜어 쓰는 양을 모두 더하고,
+   개봉 중 팩의 남은 양 + 냉장고 팩 + 도착 예정 팩과 비교해요. (냉장 기한은 따지지 않아요)
+   entries를 넘기면 그 목록으로 계산 (일정 수정 창에서 저장 전 미리보기) */
+function ingBalance(entries){
+  var t=todayISO(), groups=[];
+  function groupOf(core,brand){
+    for(var i=0;i<groups.length;i++){
+      var g=groups[i];
+      if(g.core===core&&sameBrand(g.brand,brand)){ if(!g.brand&&brand) g.brand=brand; return g; }
+    }
+    var ng={core:core, brand:brand||'', need:0, unknown:false, entryIds:[], have:0, coming:0, size:0, packs:0};
+    groups.push(ng); return ng;
+  }
+  (entries||state.entries).forEach(function(e){
+    if(!e||e.end<t) return;
+    var cores=entryCores(e); if(!cores.length) return;
+    var mpd=mealsPerDayOf(e);
+    for(var d=(e.start<t?t:e.start); d<=e.end; d=addDays(d,1)){
+      var left=mpd-logSlots(state.logs[d]).length;      /* 기록한 끼니(쉬어감 포함)는 이미 끝난 끼니 */
+      if(left<=0) continue;
+      cores.forEach(function(o){
+        var g=groupOf(o.core,e.brand), per=entryShareFor(e,o.core,d,cores);
+        if(g.entryIds.indexOf(e.id)<0) g.entryIds.push(e.id);
+        if(!(per>0)) g.unknown=true;
+        g.need+=left*(per||0);
+        if(!g.size&&o.size) g.size=o.size;
+      });
+    }
+  });
+  groups.forEach(function(g){
+    state.stock.forEach(function(x){
+      if(coreName(x.name,x.brand)!==g.core||!sameBrand(x.brand,g.brand)||!(x.qty>0)) return;
+      var size=Math.max(0,x.size||0);
+      if(!g.size&&size) g.size=size;
+      g.packs+=x.qty;
+      if(x.status==='expected'){ g.coming+=x.qty*size; return; }
+      g.have+=x.opened?(packUsage(x).remaining+(x.qty-1)*size):x.qty*size;
+    });
+    g.need=Math.round(g.need); g.have=Math.round(g.have); g.coming=Math.round(g.coming);
+    var gap=g.need-g.have-g.coming;
+    g.state=(g.need<=0)?'none':(!g.packs?'nostock':(gap>0.5?'short':(g.need>g.have+0.5?'wait':'ok')));
+    g.shortPacks=(g.state==='short'&&g.size)?Math.ceil(gap/g.size):0;
+    if(g.state==='nostock'&&g.size) g.shortPacks=Math.ceil(g.need/g.size);
+  });
+  return groups.filter(function(g){ return g.need>0; });
+}
+function balanceText(g){
+  var stock='냉장고 '+g.have+'g'+(g.coming?' + 도착 예정 '+g.coming+'g':'');
+  var head='<b>'+esc(g.core)+'</b> 식단 '+g.entryIds.length+'개에 '+g.need+'g'+(g.unknown?'+':'');
+  if(g.state==='nostock') return {cls:'short', icon:'⚠️', text:head+' 필요 · 재고에 '+esc(g.core)+' 팩이 없어요'+(g.shortPacks?' (약 '+g.shortPacks+'팩 필요)':'')};
+  if(g.state==='short') return {cls:'short', icon:'⚠️', text:head+' 필요 · '+stock+' → '+(g.shortPacks?'약 '+g.shortPacks+'팩 부족':(g.need-g.have-g.coming)+'g 부족')};
+  if(g.state==='wait') return {cls:'wait', icon:'⏳', text:head+' 필요 · '+stock+' (도착해야 충분해요)'};
+  return {cls:'ok', icon:'✓', text:head+' 필요 · '+stock};
+}
+function balanceListHTML(list){
+  return list.map(function(g){
+    var b=balanceText(g);
+    return '<div class="bal-row bal-'+b.cls+'"><span class="bal-ic">'+b.icon+'</span><span>'+b.text+'</span></div>';
+  }).join('');
+}
+/* 재고 탭 맨 위: 재료별 요약 (부족하면 펼쳐서) */
+function balanceCardHTML(){
+  var list=ingBalance();
+  if(!list.length) return '';
+  var short=list.filter(function(g){ return g.state==='short'||g.state==='nostock'; });
+  var wait=list.filter(function(g){ return g.state==='wait'; });
+  var sub=short.length?short.map(function(g){ return '⚠️ '+g.core+(g.shortPacks?' '+g.shortPacks+'팩':'')+' 부족'; }).join(' · ')
+    :(wait.length?'⏳ '+wait.map(function(g){ return g.core; }).join('·')+' 도착 기다리는 중':'✓ 모두 충분해요');
+  var open=balanceOpen==null?!!short.length:balanceOpen;
+  return '<details class="warn-fold bal-fold" id="balFold"'+(open?' open':'')+'>'+
+    '<summary>🧮 앞으로 필요한 재료<span class="wf-sub">'+esc(sub)+'</span><span class="chev">▾</span></summary>'+
+    '<div class="bal-body">'+balanceListHTML(list)+
+      '<p class="alert-foot">오늘 이후 아직 기록 안 한 끼니 기준이에요. 개봉 중 팩은 남은 양만 세요. 냉장 기한은 따지지 않아요.</p></div></details>';
+}
+var balanceOpen=null;
+
 /* 그날 덜어낸 끼니 수 (쉬어감 제외) */
 function dayMealsUsed(date){
   var lg=state.logs[date];
@@ -2044,7 +2134,7 @@ function renderStock(){
   var expected=state.stock.filter(function(s){ return s.status==='expected'; })
     .sort(function(a,b){ return cmpStr(a.expected||'9999-12-31',b.expected||'9999-12-31')||String(a.name).localeCompare(String(b.name),'ko'); });
 
-  var html=warn;
+  var html=balanceCardHTML()+warn;
   html+='<div class="sec-head"><span class="sec-title">보유 · 냉장고</span><span class="sec-sub">'+sumQty(arrived)+'팩</span></div>';
   /* 다 먹은 팩(0팩·개봉 안 함)은 아래에 접어 둬요 */
   var inFridge=sortFridge(arrived.filter(function(s){ return s.qty>0||!!s.opened; }));
@@ -2065,6 +2155,8 @@ function renderStock(){
   $('#stockWarnMount').innerHTML=(pd?'<div class="sec-head"><span class="sec-title">다 먹은 팩 정리</span></div>'+pd:'')+
     (pa?'<div class="sec-head"><span class="sec-title">곧 먹을 식단 · 팩 확인</span><span class="sec-sub">'+ALERT_DAYS+'일 안</span></div>'+pa:'');
   $('#stockMount').innerHTML=html;
+  var bf=document.getElementById('balFold');
+  if(bf) bf.addEventListener('toggle', function(){ balanceOpen=bf.open; });
 }
 
 /* 재료 카드 아래: 관찰 진행도 · 통과 제안 · 반응 메모 모아보기 */
@@ -2847,7 +2939,7 @@ function openEntrySheet(id, presetDate){
         var left='';
         if(o.size){
           var l1=o.size-hi, l2=o.size-lo;
-          left=l2<0?' (팩 '+o.size+'g보다 '+(-l2)+'g 더 필요)':' (팩 '+o.size+'g 중 '+(l1===l2?l1:Math.max(0,l1)+'~'+l2)+'g 남음)';
+          left=l1<0?' (팩 약 '+(Math.round(hi/o.size*10)/10)+'개 분량)':' (팩 '+o.size+'g 중 '+(l1===l2?l1:l1+'~'+l2)+'g 남음)';
         }
         return '<b>'+esc(o.core)+'</b> '+used+left;
       });
@@ -2876,7 +2968,8 @@ function openEntrySheet(id, presetDate){
       var t=typedTotal(cores), gEl=root.querySelector('#fGrams');
       if(t!=null&&gEl&&gEl.value!==fmtG(t)){ gEl.value=fmtG(t); gEl.dispatchEvent(new Event('input',{bubbles:true,cancelable:true})); }
     }
-    var gramsByPack=false;   /* 팩 g 입력이 1회 양을 바꾸는 중이면 자동 초기화를 건너뜀 */
+    var gramsByPack=false;
+    var shortAck=false;   /* 재고 부족 안내를 한 번 보여 줬는지 */   /* 팩 g 입력이 1회 양을 바꾸는 중이면 자동 초기화를 건너뜀 */
     function renderPackUse(){
       if(!useBox) return;
       var fe=formEntry(), cores=entryCores(fe);
@@ -2898,7 +2991,19 @@ function openEntrySheet(id, presetDate){
         '<p class="puse-hint" id="puseHint">'+(t!=null
           ?'한 끼 합계 <b>'+fmtG(t)+'g</b>'+(mismatch?' · 1회 양('+esc(fe.grams||'비어 있음')+')과 달라요 <button type="button" class="mini mini-primary" data-act-local="sync-grams">1회 양을 '+fmtG(t)+'g으로 맞추기</button>':' · 1회 양과 같아요')
           :'1회 양 '+esc(fe.grams||'—')+'g을 비율대로 나눠요. 팩별로 직접 적으면 1회 양이 합계로 바뀌어요.')+'</p>'+
-        '<p class="puse-sum" id="puseSum">'+useSummary(fe,cores)+'</p></div>';
+        '<p class="puse-sum" id="puseSum">'+useSummary(fe,cores)+'</p>'+
+        formBalanceHTML(fe,cores)+'</div>';
+    }
+    /* 이 식단 재료가 다른 식단과 합쳐 재고로 충분한지 (저장 전 미리보기) */
+    function formBalanceList(list,cores){
+      var mine=cores.map(function(o){ return o.core; });
+      return ingBalance(list).filter(function(g){ return mine.indexOf(g.core)>=0&&sameBrand(g.brand,(root.querySelector('#fBrand')||{}).value||''); });
+    }
+    function formBalanceHTML(fe,cores){
+      var list=state.entries.filter(function(x){ return !e||x.id!==e.id; }).concat([fe]);
+      var bl=formBalanceList(list,cores);
+      if(!bl.length) return '';
+      return '<div class="bal-box"><div class="bal-title">재고로 충분한지 <small>오늘 이후 다른 식단까지 합쳐서</small></div>'+balanceListHTML(bl)+'</div>';
     }
     if(useBox){
       useBox.addEventListener('click',function(ev){
@@ -2929,6 +3034,8 @@ function openEntrySheet(id, presetDate){
         gramsByPack=true; syncGramsField(cores); gramsByPack=false;
         var fe=formEntry(), sm=root.querySelector('#puseSum'), hn=root.querySelector('#puseHint');
         if(sm) sm.innerHTML=useSummary(fe,cores);
+        var bx=root.querySelector('.bal-box'), nb=formBalanceHTML(fe,cores);
+        if(bx) bx.outerHTML=nb; else if(nb&&sm) sm.insertAdjacentHTML('afterend',nb);
         var t=typedTotal(cores);
         if(hn) hn.innerHTML=t!=null?'한 끼 합계 <b>'+fmtG(t)+'g</b> · 1회 양도 '+fmtG(t)+'g으로 맞췄어요':'1회 양 '+esc(fe.grams||'—')+'g을 비율대로 나눠요. 팩별로 직접 적으면 1회 양이 합계로 바뀌어요.';
       });
@@ -3158,6 +3265,17 @@ function openEntrySheet(id, presetDate){
         return;
       }
       showErr('');
+      /* 재고보다 많이 쓰는 식단이면 한 번 알려 주고, 다시 누르면 저장 */
+      var shortList=formBalanceList(next,entryCores(rec)).filter(function(g){ return g.state==='short'||g.state==='nostock'; });
+      if(shortList.length&&!shortAck){
+        shortAck=true;
+        var sb=root.querySelector('#entryForm button[type="submit"]');
+        if(sb) sb.textContent='그래도 저장';
+        var bx=root.querySelector('.bal-box');
+        if(bx){ bx.classList.add('flash'); bx.scrollIntoView({block:'center',behavior:'smooth'}); }
+        toast('⚠️ '+shortList.map(function(g){ return g.core+(g.shortPacks?' 약 '+g.shortPacks+'팩':''); }).join(' · ')+' 부족해요 · 한 번 더 누르면 저장돼요');
+        return;
+      }
       state.entries=next.sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
       if(follow&&delta) remapLogs(function(k){ return k>oldEnd?addDays(k,delta):k; });
       save(); closeSheet(); render();
