@@ -314,7 +314,10 @@ details[open] .chev{transform:rotate(180deg)}
 .puse-row span{flex:1;min-width:0}
 .puse-row input{width:84px;font-family:inherit;font-size:16px;padding:7px 9px;border:1px solid #EAD9C8;border-radius:10px;background:#fff;text-align:right}
 .puse-row em{font-style:normal;color:#8A7766;font-weight:700}
-.puse-sum{margin:8px 0 0;font-size:12px;color:#6F5F52;font-weight:600;line-height:1.5;word-break:keep-all}
+.puse-hint{margin:8px 0 0;font-size:12px;color:#7A5A47;font-weight:600;line-height:1.6;word-break:keep-all}
+.puse-hint b{color:#B8523A}
+.puse-hint .mini{margin-left:4px;vertical-align:middle}
+.puse-sum{margin:6px 0 0;font-size:12px;color:#6F5F52;font-weight:600;line-height:1.5;word-break:keep-all}
 .puse-sum b{color:#B8523A}
 .pd-row small{font-size:11.5px;color:#8A7766;font-weight:600}
 .dday-eat .warn{color:#B0452F;font-weight:800}
@@ -553,7 +556,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.21';
+var APP_VERSION='2026.11.21b';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -2736,53 +2739,127 @@ function openEntrySheet(id, presetDate){
         grams:(root.querySelector('#fGrams').value||'').trim(), packIds:ids, packId:ids[0]||null,
         start:isDate(sv)?sv:start, end:isDate(ev2)?ev2:end, mealsPerDay:mpd, packRatio:useRatio, packGrams:useGrams};
     }
+    /* 1회 양 범위 → [최소, 최대] (단일 값이면 둘이 같음) */
+    function gramsRangeOf(v){
+      var parts=String(v==null?'':v).split('~').map(function(x){ return Number(String(x).trim()); }).filter(function(x){ return isFinite(x)&&x>0; });
+      if(!parts.length) return null;
+      return [parts[0], parts.length>1?parts[1]:parts[0]];
+    }
+    function fmtG(n){ return String(Math.round(n*10)/10); }
+    function weightOf(c){ return Number(useRatio[c])>0?Number(useRatio[c]):1; }
+    /* 팩별 한 끼 g: 직접 적은 값, 아니면 1회 양(범위면 [최소,최대]) × 비율 */
+    function coreRange(c,cores,fe){
+      if(Number(useGrams[c])>0){ var g=Number(useGrams[c]); return [g,g]; }
+      var r=gramsRangeOf(fe.grams); if(!r) return null;
+      var sum=0; cores.forEach(function(o){ sum+=weightOf(o.core); });
+      var w=weightOf(c)/(sum||1);
+      return [r[0]*w, r[1]*w];
+    }
+    function rangeText(r){ return !r?'':(Math.abs(r[0]-r[1])<0.05?fmtG(r[0]):fmtG(r[0])+'~'+fmtG(r[1])); }
     function useSummary(fe,cores){
       var days=Math.max(1,diffDays(fe.start,fe.end)+1), meals=days*mealsPerDayOf(fe);
       var parts=cores.map(function(o){
-        var per=entryShareFor(fe,o.core,fe.start,cores), tot=Math.round(per*meals);
-        var left=o.size?Math.round(o.size-tot):null;
-        return '<b>'+esc(o.core)+'</b> '+tot+'g'+(o.size?(left>=0?' (팩 '+o.size+'g 중 '+left+'g 남음)':' (팩 '+o.size+'g보다 '+(-left)+'g 더 필요)'):'');
+        var r=coreRange(o.core,cores,fe); if(!r) return '<b>'+esc(o.core)+'</b> —';
+        var lo=Math.round(r[0]*meals), hi=Math.round(r[1]*meals);
+        var used=lo===hi?lo+'g':lo+'~'+hi+'g';
+        var left='';
+        if(o.size){
+          var l1=o.size-hi, l2=o.size-lo;
+          left=l2<0?' (팩 '+o.size+'g보다 '+(-l2)+'g 더 필요)':' (팩 '+o.size+'g 중 '+(l1===l2?l1:Math.max(0,l1)+'~'+l2)+'g 남음)';
+        }
+        return '<b>'+esc(o.core)+'</b> '+used+left;
       });
       return days+'일 · '+meals+'끼 동안 → '+parts.join(' · ');
     }
+    /* 직접 적은 팩이 있으면: 안 적은 팩은 비율대로 따라오고, 1회 양 = 합계 */
+    function typedTotal(cores){
+      var ref=null;
+      cores.forEach(function(o){ if(!ref&&Number(useGrams[o.core])>0) ref=o.core; });
+      if(!ref) return null;
+      var unit=Number(useGrams[ref])/weightOf(ref), total=0;
+      cores.forEach(function(o){ total+=Number(useGrams[o.core])>0?Number(useGrams[o.core]):unit*weightOf(o.core); });
+      return Math.round(total*10)/10;
+    }
+    function followFill(cores){
+      var ref=null;
+      cores.forEach(function(o){ if(!ref&&Number(useGrams[o.core])>0) ref=o.core; });
+      Array.prototype.forEach.call(useBox.querySelectorAll('input[data-core]'),function(inp){
+        var c=inp.getAttribute('data-core');
+        if(Number(useGrams[c])>0) return;
+        inp.value='';
+        if(ref) inp.placeholder=fmtG(Number(useGrams[ref])/weightOf(ref)*weightOf(c));
+      });
+    }
+    function syncGramsField(cores){
+      var t=typedTotal(cores), gEl=root.querySelector('#fGrams');
+      if(t!=null&&gEl&&gEl.value!==fmtG(t)){ gEl.value=fmtG(t); gEl.dispatchEvent(new Event('input',{bubbles:true,cancelable:true})); }
+    }
+    var gramsByPack=false;   /* 팩 g 입력이 1회 양을 바꾸는 중이면 자동 초기화를 건너뜀 */
     function renderPackUse(){
       if(!useBox) return;
       var fe=formEntry(), cores=entryCores(fe);
       if(!cores.length){ useBox.innerHTML=''; return; }
-      var ratioKey=cores.length===2?((Number(useRatio[cores[0].core])||1)+':'+(Number(useRatio[cores[1].core])||1)):'';
+      var ratioKey=cores.length===2?(weightOf(cores[0].core)+':'+weightOf(cores[1].core)):'';
+      var anyTyped=cores.some(function(o){ return Number(useGrams[o.core])>0; });
       var chips=cores.length===2?'<div class="puse-ratio"><span>'+esc(cores[0].core)+' : '+esc(cores[1].core)+'</span>'+
-        ['1:1','2:1','1:2'].map(function(k){ return '<button type="button" data-ratio="'+k+'" class="'+(k===ratioKey&&!Object.keys(useGrams).length?'on':'')+'">'+k.replace(':',' : ')+'</button>'; }).join('')+'</div>':'';
-      useBox.innerHTML='<div class="puse"><div class="puse-head">팩에서 덜어 쓰는 양 <small>한 끼 기준 · 비우면 자동</small></div>'+chips+
+        ['1:1','2:1','1:2'].map(function(k){ return '<button type="button" data-ratio="'+k+'" class="'+(k===ratioKey?'on':'')+'">'+k.replace(':',' : ')+'</button>'; }).join('')+'</div>':'';
+      var t=typedTotal(cores), gNow=gramsRangeOf(fe.grams);
+      var mismatch=(t!=null&&!(gNow&&gNow[0]===gNow[1]&&Math.abs(gNow[0]-t)<0.05));
+      useBox.innerHTML='<div class="puse"><div class="puse-head">팩에서 덜어 쓰는 양 <small>한 끼 기준</small></div>'+chips+
         cores.map(function(o){
-          var auto=Math.round(entryShareFor({grams:fe.grams,packRatio:useRatio,packIds:fe.packIds,menu:fe.menu,brand:fe.brand},o.core,fe.start,cores)*10)/10;
-          var v=Number(useGrams[o.core])>0?useGrams[o.core]:'';
+          var typed=Number(useGrams[o.core])>0;
+          var r=coreRange(o.core,cores,fe);
+          if(!typed&&anyTyped){ var tt=typedTotal(cores); r=tt!=null?[tt*weightOf(o.core)/cores.reduce(function(a,x){ return a+weightOf(x.core); },0),0]:r; if(r) r[1]=r[0]; }
           return '<label class="puse-row"><span>'+esc(o.name)+'</span>'+
-            '<input type="number" inputmode="decimal" min="0" max="'+MAX_GRAMS+'" step="0.5" data-core="'+esc(o.core)+'" value="'+esc(v)+'" placeholder="'+(auto||'')+'"><em>g</em></label>';
+            '<input type="text" inputmode="decimal" data-core="'+esc(o.core)+'" value="'+(typed?esc(useGrams[o.core]):'')+'" placeholder="'+esc(rangeText(r))+'"><em>g</em></label>';
         }).join('')+
+        '<p class="puse-hint" id="puseHint">'+(t!=null
+          ?'한 끼 합계 <b>'+fmtG(t)+'g</b>'+(mismatch?' · 1회 양('+esc(fe.grams||'비어 있음')+')과 달라요 <button type="button" class="mini mini-primary" data-act-local="sync-grams">1회 양을 '+fmtG(t)+'g으로 맞추기</button>':' · 1회 양과 같아요')
+          :'1회 양 '+esc(fe.grams||'—')+'g을 비율대로 나눠요. 팩별로 직접 적으면 1회 양이 합계로 바뀌어요.')+'</p>'+
         '<p class="puse-sum" id="puseSum">'+useSummary(fe,cores)+'</p></div>';
     }
     if(useBox){
       useBox.addEventListener('click',function(ev){
+        var sg=ev.target.closest?ev.target.closest('[data-act-local="sync-grams"]'):null;
+        if(sg){
+          var cs=entryCores(formEntry());
+          gramsByPack=true; syncGramsField(cs); gramsByPack=false;
+          renderPackUse(); return;
+        }
         var b=ev.target.closest?ev.target.closest('[data-ratio]'):null;
         if(!b) return;
         var cores=entryCores(formEntry()); if(cores.length!==2) return;
         var r=b.getAttribute('data-ratio').split(':');
+        /* 직접 적은 합계는 유지한 채 비율만 바꿔 다시 나눔 */
+        var keepTotal=typedTotal(cores);
         useRatio={}; useGrams={};
         if(r[0]!==r[1]){ useRatio[cores[0].core]=Number(r[0]); useRatio[cores[1].core]=Number(r[1]); }
+        if(keepTotal!=null){ gramsByPack=true; var gEl=root.querySelector('#fGrams'); if(gEl){ gEl.value=fmtG(keepTotal); gEl.dispatchEvent(new Event('input',{bubbles:true})); } gramsByPack=false; }
         renderPackUse();
       });
       useBox.addEventListener('input',function(ev){
         var c=ev.target&&ev.target.getAttribute&&ev.target.getAttribute('data-core');
         if(!c) return;
-        var v=Number(ev.target.value);
-        if(ev.target.value!==''&&isFinite(v)&&v>0) useGrams[c]=v; else delete useGrams[c];
-        var fe=formEntry(), sm=root.querySelector('#puseSum');
-        if(sm) sm.innerHTML=useSummary(fe,entryCores(fe));
-        Array.prototype.forEach.call(useBox.querySelectorAll('[data-ratio]'),function(x){ x.classList.remove('on'); });
+        var v=Number(String(ev.target.value).replace(',','.'));
+        if(ev.target.value!==''&&isFinite(v)&&v>0&&v<=MAX_GRAMS) useGrams[c]=v; else delete useGrams[c];
+        var cores=entryCores(formEntry());
+        followFill(cores);
+        gramsByPack=true; syncGramsField(cores); gramsByPack=false;
+        var fe=formEntry(), sm=root.querySelector('#puseSum'), hn=root.querySelector('#puseHint');
+        if(sm) sm.innerHTML=useSummary(fe,cores);
+        var t=typedTotal(cores);
+        if(hn) hn.innerHTML=t!=null?'한 끼 합계 <b>'+fmtG(t)+'g</b> · 1회 양도 '+fmtG(t)+'g으로 맞췄어요':'1회 양 '+esc(fe.grams||'—')+'g을 비율대로 나눠요. 팩별로 직접 적으면 1회 양이 합계로 바뀌어요.';
       });
     }
-    ['#fMenu','#fBrand','#fGrams','#fStart','#fEnd'].forEach(function(sel){
+    ['#fMenu','#fBrand','#fStart','#fEnd'].forEach(function(sel){
       var el=root.querySelector(sel); if(el) el.addEventListener('input',function(){ renderPackUse(); });
+    });
+    /* 1회 양을 직접 고치면 팩별 g은 다시 비율대로 자동 */
+    var gField=root.querySelector('#fGrams');
+    if(gField) gField.addEventListener('input',function(){
+      if(gramsByPack) return;
+      useGrams={};
+      renderPackUse();
     });
     if(mealSeg) mealSeg.addEventListener('click',function(){ setTimeout(renderPackUse,0); });
     renderPackUse();
