@@ -107,6 +107,9 @@ button{font-family:inherit}
 .seg.seg-grid button{font-size:11px;padding:8px 1px;letter-spacing:-.03em}
 .mate-box{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding:8px 10px;border-radius:12px;background:#FDF4EC;font-size:12.5px;color:#7A6A5C}
 .mate-box b{color:#B0664A}.mate-box small{color:#A0917F;font-weight:700}
+.ing-group-head{margin:14px 2px 7px;font-size:12.5px;font-weight:800;color:#8A6A55}
+.ing-group-head span{color:#B0664A;margin-left:2px}
+.ing-fold{margin-top:12px}
 .slot-menu{margin:0 0 10px;font-size:12.5px;color:#7A6A5C;background:#FDF4EC;border-radius:10px;padding:7px 10px}
 .slot-menu b{color:#3F3A33}
 .hs-row{display:flex;align-items:center;gap:9px;padding:8px 0}
@@ -606,7 +609,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.21l';
+var APP_VERSION='2026.11.21m';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -2344,6 +2347,7 @@ function ingExtraHTML(g){
   return html;
 }
 
+var ingDoneOpen=false;
 function renderIng(){
   var counts={done:0,testing:0,caution:0,todo:0};
   state.ingredients.forEach(function(g){ counts[g.status]=(counts[g.status]||0)+1; });
@@ -2353,7 +2357,26 @@ function renderIng(){
     '<div class="stat caution"><b>'+counts.caution+'</b><span>주의</span></div>'+
     '<div class="stat todo"><b>'+counts.todo+'</b><span>미시도</span></div>'+
   '</div>';
-  var list=state.ingredients.map(function(g){
+  /* 지금 신경 쓸 재료가 위로: 관찰중 → 주의 → 미시도(곧 먹을 식단 순) → 통과(접어 둠, 최근 시작 순) */
+  var t=todayISO();
+  function nextUse(g){
+    var best='9999-12-31';
+    state.entries.forEach(function(e){
+      if(e.end<t||!ingMatchesEntry(g,e)) return;
+      var d=e.start<t?t:e.start; if(d<best) best=d;
+    });
+    return best;
+  }
+  function byName(a,b){ return String(a.name).localeCompare(String(b.name),'ko'); }
+  function group(st){ return state.ingredients.filter(function(g){ return g.status===st; }); }
+  var groups=[
+    {st:'testing', l:'관찰중', items:group('testing').sort(function(a,b){ return cmpStr(a.first||'9999',b.first||'9999')||byName(a,b); })},
+    {st:'caution', l:'주의', items:group('caution').sort(function(a,b){ return cmpStr(a.first||'9999',b.first||'9999')||byName(a,b); })},
+    {st:'todo', l:'미시도', items:group('todo').map(function(g){ return {g:g, n:nextUse(g)}; })
+      .sort(function(a,b){ return cmpStr(a.n,b.n)||byName(a.g,b.g); }).map(function(x){ return x.g; })},
+    {st:'done', l:'통과', items:group('done').sort(function(a,b){ return cmpStr(b.first||'',a.first||'')||byName(a,b); })}
+  ];
+  function ingCardHTML(g){
     var seg=ING_ST.map(function(s){
       return '<button data-act="ing-status" data-id="'+g.id+'" data-v="'+s.v+'" class="'+(g.status===s.v?'on':'')+'">'+s.l+'</button>';
     }).join('');
@@ -2367,11 +2390,21 @@ function renderIng(){
       ingExtraHTML(g)+
       '<input class="ing-memo" data-memo="'+g.id+'" type="text" value="'+esc(g.memo||'')+'" placeholder="메모 (예: 발진 없음, 다음엔 양 늘리기)">'+
     '</div>';
+  }
+  var list=groups.map(function(gr){
+    if(!gr.items.length) return '';
+    var cards=gr.items.map(ingCardHTML).join('');
+    if(gr.st==='done'){
+      return '<details class="fold ing-fold" id="ingDoneFold"'+(ingDoneOpen?' open':'')+'><summary>✅ 통과한 재료 '+gr.items.length+'개 <span class="chev">▾</span></summary>'+cards+'</details>';
+    }
+    return '<div class="ing-group-head">'+gr.l+' <span>'+gr.items.length+'</span></div>'+cards;
   }).join('');
   $('#ingMount').innerHTML=
     '<div class="sec-head"><span class="sec-title">재료 적응 도감</span><span class="sec-sub">총 '+state.ingredients.length+'개</span></div>'+
     stats+list+
     '<button class="btn btn-ghost btn-block" style="margin-top:6px" data-act="ing-new">＋ 새 재료 추가</button>';
+  var df=document.getElementById('ingDoneFold');
+  if(df) df.addEventListener('toggle', function(){ ingDoneOpen=df.open; });
 }
 
 /* ───────── 브랜드별 정보 ───────── */
