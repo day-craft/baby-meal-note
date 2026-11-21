@@ -94,6 +94,10 @@ button{font-family:inherit}
 .meta-pill{font-size:12px;font-weight:700;color:#9E6448;background:#FDF0E4;border-radius:999px;padding:4px 10px}
 .hero-note{margin:6px 0 0;font-size:12.5px;color:#807265;line-height:1.5;word-break:keep-all}
 .hero-split{margin-top:8px}
+.field .check input[type="checkbox"]{width:18px;height:18px;min-height:0;padding:0;margin:0;border-radius:3px;-webkit-appearance:checkbox;appearance:auto;flex:0 0 auto;box-shadow:none}
+.seg.seg-grid button{font-size:11px;padding:8px 1px;letter-spacing:-.03em}
+.mate-box{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding:8px 10px;border-radius:12px;background:#FDF4EC;font-size:12.5px;color:#7A6A5C}
+.mate-box b{color:#B0664A}.mate-box small{color:#A0917F;font-weight:700}
 .slot-menu{margin:0 0 10px;font-size:12.5px;color:#7A6A5C;background:#FDF4EC;border-radius:10px;padding:7px 10px}
 .slot-menu b{color:#3F3A33}
 .hs-row{display:flex;align-items:center;gap:9px;padding:8px 0}
@@ -593,7 +597,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.21h';
+var APP_VERSION='2026.11.21i';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -956,6 +960,18 @@ function entryLog(e,d){
 function entryMealsUsed(e,d){
   return logSlots(entryLog(e,d)).filter(function(x){ return x.slot.amount&&x.slot.amount!=='skip'; }).length;
 }
+/* '2식 · 다른 메뉴' 짝 식단: 반대 끼니의 1식 식단 중 기간이 겹치는 것 (같은 기간 우선) */
+function entryPartner(e){
+  if(!e||mealsPerDayOf(e)===2) return null;
+  var other=e.slot==='pm'?'am':'pm', best=null;
+  state.entries.forEach(function(x){
+    if(x===e||x.id===e.id||mealsPerDayOf(x)===2||entrySlots(x)[0]!==other) return;
+    if(x.start>e.end||e.start>x.end) return;
+    if(!best||(x.start===e.start&&x.end===e.end)) best=x;
+  });
+  return best;
+}
+var pendingIng=[], pendingIngMenu='';   /* '2식 · 다른 메뉴'로 이어 여는 동안 미뤄 둔 도감 추가 제안 */
 /* 1식 식단의 기간 중 다른 끼니에 다른 식단이 있는지 (리스트에 '오전' 표시용) */
 function entryHasPartner(e){
   if(mealsPerDayOf(e)===2) return false;
@@ -2925,8 +2941,9 @@ function packPickHTML(e){
   }).join('')+'</div>';
 }
 
-function mpdHintText(v){
+function mpdHintText(v,slot){
   if(v==='2') return '오전·오후 같은 메뉴로 두 끼예요. 1회 양은 한 끼 기준이에요.';
+  if(v==='2d') return '오전·오후 메뉴가 달라요. 이 창은 '+(slot==='pm'?'오후':'오전')+' 메뉴예요. 저장하면 '+(slot==='pm'?'오전':'오후')+' 메뉴 창이 같은 기간으로 이어서 열려요.';
   if(v==='pm') return '하루 한 끼, 오후에 먹여요. 같은 날 오전에는 다른 식단을 따로 넣을 수 있어요.';
   return '하루 한 끼, 오전에 먹여요. 같은 날 오후에는 다른 식단을 따로 넣을 수 있어요.';
 }
@@ -2947,7 +2964,10 @@ function openEntrySheet(id, presetDate, presetSlot){
     state.entries.forEach(function(x){ if(x.start>start&&x.start<=end) end=addDays(x.start,-1); });
     if(end<start) end=start;
   }
-  var mpdInit=e?(mealsPerDayOf(e)===2?'2':(e.slot==='pm'?'pm':'am')):(presetSlot==='pm'?'pm':'am');
+  var mate=e?entryPartner(e):partner;     /* 짝 식단 (오전·오후 다른 메뉴) */
+  var mpdInit=e?(mealsPerDayOf(e)===2?'2':(mate?'2d':(e.slot==='pm'?'pm':'am'))):(partner?'2d':(presetSlot==='pm'?'pm':'am'));
+  var slotInit=e?(e.slot==='pm'?'pm':''):(presetSlot==='pm'?'pm':'');
+  var sameRange=!!(e&&mate&&mate.start===e.start&&mate.end===e.end);
   var body='<form id="entryForm" novalidate>'+
     '<label class="field">메뉴 이름<input id="fMenu" type="text" value="'+esc(e?e.menu:'')+'" placeholder="예: 루솔 한우감자미음"></label>'+
     '<div class="field-row">'+
@@ -2965,12 +2985,15 @@ function openEntrySheet(id, presetDate, presetSlot){
       '<p class="dg-foot hidden" id="dgFoot"></p>'+
     '</div>'+
     '<div class="field" style="margin-bottom:12px">하루 끼니'+
-      '<div class="seg" id="mealSeg" style="margin-top:6px">'+
-        ['am','pm','2'].map(function(v){
-          return '<button type="button" data-mpd="'+v+'" data-v="full" class="'+(v===mpdInit?'on':'')+'">'+(v==='am'?'1식 · 오전':(v==='pm'?'1식 · 오후':'2식 · 같은 메뉴'))+'</button>';
+      '<div class="seg seg-grid" id="mealSeg" style="margin-top:6px">'+
+        ['am','pm','2','2d'].map(function(v){
+          return '<button type="button" data-mpd="'+v+'" data-v="full" class="'+(v===mpdInit?'on':'')+'">'+({am:'1식 · 오전',pm:'1식 · 오후','2':'2식 · 같은 메뉴','2d':'2식 · 다른 메뉴'})[v]+'</button>';
         }).join('')+
       '</div>'+
-      '<p class="sheet-note" style="margin:6px 0 0" id="mpdHint">'+esc(mpdHintText(mpdInit))+'</p>'+
+      '<p class="sheet-note" style="margin:6px 0 0" id="mpdHint">'+esc(mate?'':mpdHintText(mpdInit,slotInit))+'</p>'+
+      (mate?'<div class="mate-box"><span>짝 식단 · <b>'+slotLabel(entrySlots(mate)[0])+'</b> '+esc(mate.menu)+' <small>'+rangeShort(mate.start,mate.end)+'</small></span>'+
+        (e?'<button type="button" class="mini" data-act-local="open-mate">열기</button>':'')+'</div>'+
+        (sameRange?'<label class="check" style="margin:8px 0 0"><input type="checkbox" id="fMateSync" checked> '+slotLabel(entrySlots(mate)[0])+' 식단 기간도 같이 바꾸기</label>':''):'')+
     '</div>'+
     '<label class="field">캘린더 표시 (짧게)<input id="fShort" type="text" maxlength="6" value="'+esc(e?e.short:'')+'" placeholder="예: 한우감자"></label>'+
     '<label class="field">메모<textarea id="fNote" rows="2" placeholder="소분 방법, 관찰 포인트">'+esc(e?e.note:'')+'</textarea></label>'+
@@ -2994,17 +3017,23 @@ function openEntrySheet(id, presetDate, presetSlot){
     var fTouched=false;
     /* 하루 끼니(1식/2식) */
     var mpd=(mpdInit==='2')?2:1;
-    var slotSel=(mpdInit==='pm')?'pm':'';   /* 1식 오후면 'pm' */
+    var mpdMode=mpdInit;
+    var slotSel=(mpdInit==='pm'||(mpdInit==='2d'&&slotInit==='pm'))?'pm':'';   /* 1식 오후(또는 다른 메뉴의 오후 쪽)면 'pm' */
+    var mateBtn=root.querySelector('[data-act-local="open-mate"]');
+    if(mateBtn) mateBtn.addEventListener('click', function(){ closeSheet(); openEntrySheet(mate.id); });
     var mealSeg=root.querySelector('#mealSeg');
     if(mealSeg) mealSeg.addEventListener('click', function(ev){
       var b=ev.target.closest?ev.target.closest('[data-mpd]'):null;
       if(!b) return;
       var v=b.getAttribute('data-mpd');
+      mpdMode=v;
       mpd=(v==='2')?2:1;
-      slotSel=(v==='pm')?'pm':'';
+      /* 다른 메뉴: 짝이 이미 있으면 짝의 반대 끼니, 없으면 지금 끼니(기본 오전) */
+      if(v==='2d') slotSel=mate?(entrySlots(mate)[0]==='pm'?'':'pm'):slotSel;
+      else slotSel=(v==='pm')?'pm':'';
       Array.prototype.forEach.call(mealSeg.children, function(c){ c.classList.toggle('on', c===b); });
       var hint=root.querySelector('#mpdHint');
-      if(hint) hint.textContent=mpdHintText(v);
+      if(hint) hint.textContent=(v==='2d'&&mate)?'':mpdHintText(v,slotSel);
     });
     /* 연결할 재고 팩 여러 개 */
     var packWrap=root.querySelector('#packPick');
@@ -3369,6 +3398,15 @@ function openEntrySheet(id, presetDate, presetSlot){
           }
         });
       }
+      /* 짝 식단 기간도 같이 */
+      var mateSync=root.querySelector('#fMateSync');
+      if(mate&&mateSync&&mateSync.checked&&(mate.start!==rec.start||mate.end!==rec.end)){
+        next.forEach(function(x){
+          if(x.id!==mate.id) return;
+          x.start=rec.start; x.end=rec.end;
+          var dg=dailyGramsFit(x.dailyGrams,x.start,x.end); if(dg) x.dailyGrams=dg; else delete x.dailyGrams;
+        });
+      }
       var hits=overlapHits(next, rec.id);
       if(hits.length){
         var names=hits.map(function(x){ return '"'+x.menu+'" '+mdShort(x.start)+'~'+mdShort(x.end); }).join(', ');
@@ -3399,7 +3437,23 @@ function openEntrySheet(id, presetDate, presetSlot){
       else if(moved) toast('일정을 고치고 뒤 일정 '+moved+'개를 '+Math.abs(delta)+'일 '+(delta<0?'당겼어요':'밀었어요'));
       else toast('일정을 고쳤어요');
       var newIng=unknownIngredients(rec);
-      if(newIng.length) askAddIngredients(newIng, rec);
+      var askFor=rec;
+      if(pendingIng.length){
+        pendingIng.forEach(function(n){ if(newIng.indexOf(n)<0&&!state.ingredients.some(function(g){ return g.name===n; })) newIng.push(n); });
+        askFor={menu:pendingIngMenu+'" · "'+rec.menu, start:rec.start};
+      }
+      pendingIng=[]; pendingIngMenu='';
+      /* '2식 · 다른 메뉴'인데 짝이 아직 없으면 반대 끼니 창을 같은 기간으로 이어서 열어요 */
+      if(mpdMode==='2d'&&!entryPartner(rec)){
+        pendingIng=newIng; pendingIngMenu=rec.menu;
+        var otherSlot=rec.slot==='pm'?'am':'pm';
+        setTimeout(function(){
+          openEntrySheet(null, rec.start, otherSlot);
+          toast((otherSlot==='pm'?'오후':'오전')+' 메뉴를 적어 주세요');
+        },60);
+        return;
+      }
+      if(newIng.length) askAddIngredients(newIng, askFor);
     });
   }});
 }
