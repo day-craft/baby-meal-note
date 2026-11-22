@@ -609,7 +609,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.21n';
+var APP_VERSION='2026.11.22';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -1565,6 +1565,33 @@ function remapLogs(mapFn){
   state.logs=out;
 }
 /* rec와 날짜가 겹치는 다른 일정들 (정렬 후 앞뒤 비교) */
+/* 끼워 넣기 계획: rec가 겹친 일정들의 '시작 날 또는 그 전'에 시작하면(진행 중인 식단을 자르지 않으면)
+   겹친 첫 일정부터 뒤 일정을 rec 길이만큼 밀어요. 같은 끼니를 쓰는 일정만 밀고, 민 뒤에도 겹치면 안 돼요 */
+function insertPlan(list, rec, hits){
+  var first=hits.slice().sort(function(a,b){ return cmpStr(a.start,b.start); })[0];
+  if(hits.some(function(h){ return h.start<rec.start; })) return {ok:false, why:'진행 중인 식단의 중간에는 끼워 넣을 수 없어요. 그 식단이 끝난 다음 날부터로 골라 주세요.'};
+  var minStart=first.start, delta=diffDays(minStart,rec.end)+1;
+  if(delta<=0) return null;
+  var rk=entrySlots(rec);
+  var movers=list.filter(function(x){
+    return x.id!==rec.id&&x.start>=minStart&&entrySlots(x).some(function(k){ return rk.indexOf(k)>=0; });
+  });
+  /* 이미 먹인 기록이 있는 일정은 밀지 않아요 */
+  var logged=movers.filter(function(x){
+    var se=findEntry(x.id); if(!se) return false;   /* 기록은 저장된 일정 기준 */
+    for(var d=se.start; d<=se.end; d=addDays(d,1)) if(logSlots(entryLog(se,d)).length) return true;
+    return false;
+  });
+  if(logged.length) return {ok:false, why:'"'+logged[0].menu+'"에 이미 먹인 기록이 있어서 뒤로 밀 수 없어요.'};
+  var ids=movers.map(function(x){ return x.id; });
+  var sim=list.map(function(x){
+    if(ids.indexOf(x.id)<0) return x;
+    return Object.assign({}, x, {start:addDays(x.start,delta), end:addDays(x.end,delta)});
+  });
+  var bad=[rec.id].concat(ids).some(function(id){ return overlapHits(sim,id).length; });
+  if(bad) return {ok:false, why:'뒤 일정을 밀어도 다른 끼니 일정과 겹쳐서 끼워 넣을 수 없어요. 날짜를 직접 조정해 주세요.'};
+  return {ok:true, first:first, delta:delta, ids:ids};
+}
 function overlapHits(list, recId){
   /* 날짜가 겹치고 맡은 끼니도 겹치는 일정 (오전 1식 + 오후 1식은 괜찮아요) */
   var rec=list.filter(function(x){ return x.id===recId; })[0];
@@ -3185,6 +3212,7 @@ function openEntrySheet(id, presetDate, presetSlot){
     var mealSeg=root.querySelector('#mealSeg');
     var sub1Last=(mpdInit==='pm')?'pm':'am', sub2Last=(mpdInit==='2d')?'2d':'2';
     function setMealMode(v){
+      disarmInsert();
       mpdMode=v;
       mpd=(v==='2')?2:1;
       /* 다른 메뉴: 짝이 이미 있으면 짝의 반대 끼니, 없으면 오전(오후 1끼에서 넘어왔으면 오후) */
@@ -3284,7 +3312,15 @@ function openEntrySheet(id, presetDate, presetSlot){
       if(t!=null&&gEl&&gEl.value!==fmtG(t)){ gEl.value=fmtG(t); gEl.dispatchEvent(new Event('input',{bubbles:true,cancelable:true})); }
     }
     var gramsByPack=false;
-    var shortAck=false;   /* 재고 부족 안내를 한 번 보여 줬는지 */   /* 팩 g 입력이 1회 양을 바꾸는 중이면 자동 초기화를 건너뜀 */
+    var shortAck=false;   /* 재고 부족 안내를 한 번 보여 줬는지 */
+    var insertArmed=false, insertedNote='';   /* 끼워 넣기 안내를 보여 줬는지 */
+    function disarmInsert(){
+      if(!insertArmed) return;
+      insertArmed=false;
+      var sb=root.querySelector('#entryForm button[type="submit"]');
+      if(sb&&sb.getAttribute('data-orig')) sb.textContent=sb.getAttribute('data-orig');
+    }
+    ['#fStart','#fEnd'].forEach(function(sel){ var el=root.querySelector(sel); if(el) el.addEventListener('input', disarmInsert); });   /* 팩 g 입력이 1회 양을 바꾸는 중이면 자동 초기화를 건너뜀 */
     function renderPackUse(){
       if(!useBox) return;
       var fe=formEntry(), cores=entryCores(fe);
@@ -3591,10 +3627,31 @@ function openEntrySheet(id, presetDate, presetSlot){
         });
       }
       var hits=overlapHits(next, rec.id);
+      /* 일정과 일정 사이에 끼워 넣기: 겹친 일정부터 뒤 일정을 이 식단 길이만큼 밀어요 */
+      var ins=hits.length?insertPlan(next, rec, hits):null;
+      if(ins&&ins.ok&&insertArmed){
+        next.forEach(function(x){
+          if(ins.ids.indexOf(x.id)<0) return;
+          var from=x.start;
+          x.start=addDays(x.start,ins.delta); x.end=addDays(x.end,ins.delta);
+          shiftDailyGrams(x,from,ins.delta);
+        });
+        insertedNote='끼워 넣고 뒤 일정 '+ins.ids.length+'개를 '+ins.delta+'일 밀었어요';
+        hits=[];
+      }
       if(hits.length){
+        if(ins&&ins.ok){
+          insertArmed=true;
+          var sbI=root.querySelector('#entryForm button[type="submit"]');
+          if(sbI){ if(!sbI.getAttribute('data-orig')) sbI.setAttribute('data-orig',sbI.textContent); sbI.textContent='끼워 넣고 저장'; }
+          showErr('이 날짜엔 "'+ins.first.menu+'" 일정이 있어요.\n"끼워 넣고 저장"을 누르면 '+mdShort(ins.first.start)+'부터 뒤 일정 '+ins.ids.length+'개가 '+ins.delta+'일씩 뒤로 밀려요.');
+          toast('끼워 넣을까요? 한 번 더 누르면 뒤 일정이 밀려요');
+          return;
+        }
         var names=hits.map(function(x){ return '"'+x.menu+'" '+mdShort(x.start)+'~'+mdShort(x.end); }).join(', ');
         var msg='다른 일정과 날짜가 겹쳐요: '+names;
-        if(e&&delta!==0&&fBox&&!fBox.disabled&&!fBox.checked) msg+='\n"'+fLabel.textContent+'"를 켜거나 날짜를 조정해 주세요.';
+        if(ins&&ins.why) msg+='\n'+ins.why;
+        else if(e&&delta!==0&&fBox&&!fBox.disabled&&!fBox.checked) msg+='\n"'+fLabel.textContent+'"를 켜거나 날짜를 조정해 주세요.';
         else msg+='\n날짜를 조정해 주세요.';
         if(mpd===1) msg+='\n오전·오후에 다른 메뉴를 먹이려면 "하루 1끼 · 오후에"(또는 오전에)로 골라 주세요.';
         showErr(msg);
@@ -3616,7 +3673,8 @@ function openEntrySheet(id, presetDate, presetSlot){
       state.entries=next.sort(function(a,b){ return a.start<b.start?-1:(a.start>b.start?1:0); });
       if(follow&&delta) remapLogs(function(k){ return k>oldEnd?addDays(k,delta):k; });
       save(); closeSheet(); render();
-      if(!e) toast('일정을 추가했어요');
+      if(insertedNote) toast(insertedNote);
+      else if(!e) toast('일정을 추가했어요');
       else if(moved) toast('일정을 고치고 뒤 일정 '+moved+'개를 '+Math.abs(delta)+'일 '+(delta<0?'당겼어요':'밀었어요'));
       else toast('일정을 고쳤어요');
       var newIng=unknownIngredients(rec);
