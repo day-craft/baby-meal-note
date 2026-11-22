@@ -610,7 +610,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.22b';
+var APP_VERSION='2026.11.22c';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -2307,13 +2307,13 @@ function renderStock(){
       var pu=packUsage(s), size=Math.max(1,s.size||0);
       var used=Math.min(1,pu.used/size);
       var eatLine=pu.used>0
-        ?'덜어 쓴 양 <b>'+pu.used+'g</b> / '+size+'g · 남은 약 '+pu.remaining+'g'
+        ?'덜어 쓴 양 <b>'+pu.used+'g</b> / '+size+'g · 남은 양 약 '+pu.remaining+'g'
         :'아직 이 팩에서 덜어 쓴 기록이 없어요';
       if(pu.entry&&pu.total>1) eatLine+=' · <span style="white-space:nowrap">'+esc(pu.entry.short||pu.entry.menu)+' '+pu.days+'/'+pu.total+'일</span>';
       var planLine='';
       if(pu.runOut) planLine=(pu.perDay?'하루 '+pu.perDay+'g씩 · ':'')+(pu.runOut===t?'오늘 다 써요':mdShort(pu.runOut)+'에 다 써요');
-      else if(pu.remaining>0&&pu.noMore) planLine='앞으로 이 재료 식단이 없어요 · 약 '+pu.leftAtLimit+'g 남아요';
-      else if(pu.remaining>0&&pu.leftAtLimit>0) planLine='<span class="warn">냉장 기한('+mdShort(pu.limit)+')까지 약 '+pu.leftAtLimit+'g 남아요</span>';
+      else if(pu.remaining>0&&pu.noMore) planLine='앞으로 이 재료 식단이 없어요 · '+pu.leftAtLimit+'g쯤 남아요';
+      else if(pu.remaining>0&&pu.leftAtLimit>0) planLine='<span class="warn">냉장 기한('+mdShort(pu.limit)+')까지 다 못 쓰고 '+pu.leftAtLimit+'g쯤 남아요</span>';
       if(planLine) eatLine+='<br>'+planLine;
       return '<div class="dday '+cls+'">'+
         '<div class="dday-main">'+
