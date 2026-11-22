@@ -470,6 +470,7 @@ details[open] .chev{transform:rotate(180deg)}
 .sheet-actions .btn{flex:1}
 .sheet-note{font-size:11.5px;color:#887D72;line-height:1.55;margin:0 0 14px}
 .sheet-note.err{color:#BF5C42;background:#FDF0EA;border:1px solid #F5DACB;border-radius:12px;padding:9px 11px;font-weight:700;white-space:pre-wrap}
+.sheet-note.err.info{color:#7A5A44;background:#FFF7EC;border-color:#F3DFC6}
 
 /* ── forms ── */
 .field{display:block;font-size:12px;font-weight:800;color:#7F7265;margin-bottom:12px}
@@ -609,7 +610,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.22';
+var APP_VERSION='2026.11.22b';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -3317,6 +3318,7 @@ function openEntrySheet(id, presetDate, presetSlot){
     function disarmInsert(){
       if(!insertArmed) return;
       insertArmed=false;
+      var ee=root.querySelector('#entryErr'); if(ee){ ee.classList.remove('info'); ee.classList.add('hidden'); }
       var sb=root.querySelector('#entryForm button[type="submit"]');
       if(sb&&sb.getAttribute('data-orig')) sb.textContent=sb.getAttribute('data-orig');
     }
@@ -3531,6 +3533,7 @@ function openEntrySheet(id, presetDate, presetSlot){
     function showErr(msg){
       var el=root.querySelector('#entryErr');
       if(!el) return;
+      el.classList.remove('info');
       if(!msg){ el.classList.add('hidden'); el.textContent=''; return; }
       el.textContent=msg;
       el.classList.remove('hidden');
@@ -3644,7 +3647,11 @@ function openEntrySheet(id, presetDate, presetSlot){
           insertArmed=true;
           var sbI=root.querySelector('#entryForm button[type="submit"]');
           if(sbI){ if(!sbI.getAttribute('data-orig')) sbI.setAttribute('data-orig',sbI.textContent); sbI.textContent='끼워 넣고 저장'; }
-          showErr('이 날짜엔 "'+ins.first.menu+'" 일정이 있어요.\n"끼워 넣고 저장"을 누르면 '+mdShort(ins.first.start)+'부터 뒤 일정 '+ins.ids.length+'개가 '+ins.delta+'일씩 뒤로 밀려요.');
+          var movNames=next.filter(function(x){ return ins.ids.indexOf(x.id)>=0; })
+            .sort(function(a,b){ return cmpStr(a.start,b.start); })
+            .map(function(x){ return x.short||x.menu; });
+          showErr('이 날짜엔 "'+ins.first.menu+'" 일정이 있어요.\n"끼워 넣고 저장"을 누르면 '+mdShort(ins.first.start)+'부터 뒤 일정 '+ins.ids.length+'개('+movNames.slice(0,4).join(' · ')+(movNames.length>4?' 외':'')+')가 '+ins.delta+'일씩 뒤로 밀려요.');
+          var ee=root.querySelector('#entryErr'); if(ee) ee.classList.add('info');
           toast('끼워 넣을까요? 한 번 더 누르면 뒤 일정이 밀려요');
           return;
         }
