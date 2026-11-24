@@ -87,7 +87,8 @@ button{font-family:inherit}
   font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-appearance:none;padding:0 0 2px}
 .hero-date-text{font-size:13px;font-weight:800;color:#7A6A5C;padding:0 6px;letter-spacing:-.01em}
 .hero-date-text em{font-style:normal;color:var(--coral-d)}
-.today-chip{margin-left:6px;font-size:11px;font-weight:800;color:var(--coral-d);background:#FCEADE;border:0;border-radius:999px;padding:5px 9px;cursor:pointer}
+.today-chip{margin-left:6px;font-size:11px;font-weight:800;color:var(--coral-d);background:transparent;border:1px solid #EFC9B5;border-radius:999px;padding:4px 8px;cursor:pointer;white-space:nowrap}
+.rel-day{display:block;font-size:11px;font-weight:700;color:#A0917F;margin-top:1px}
 .hero-kicker{margin-top:10px;font-size:11.5px;font-weight:800;color:var(--peach-d);letter-spacing:.01em}
 .hero-menu{margin:2px 0 0;font-size:19px;font-weight:800;letter-spacing:-.03em;line-height:1.26;color:#3A342D;word-break:keep-all}
 .hero-meta{margin-top:4px;font-size:12.5px;font-weight:700;color:#9E6448;word-break:keep-all}
@@ -610,7 +611,7 @@ var KEY='yebin-iyuk-planner-v1';
 var UNDO_KEY=KEY+'-undo';
 var CORRUPT_KEY=KEY+'-corrupt';
 var BACKUP_KEY=KEY+'-backup';      /* 이 기기에서 마지막으로 백업한 때 · 알림 미루기 (기기별) */
-var APP_VERSION='2026.11.22c';
+var APP_VERSION='2026.11.24';
 var BACKUP_EVERY=30;               /* 며칠마다 백업을 권할지 */
 var bootCorrupt=false;
 var sheetScrollY=0;
@@ -1761,6 +1762,13 @@ function logBoxHTML(log,e,planTwo){
 }
 
 var warnFoldOpen=false;
+/* 보고 있는 날이 오늘에서 얼마나 떨어졌는지: 어제 · 내일 · 3일 전 · 2일 뒤 */
+function relDayText(t,d){
+  var n=diffDays(t,d);
+  if(n===-1) return '어제';
+  if(n===1) return '내일';
+  return n<0?(-n)+'일 전':n+'일 뒤';
+}
 function renderPlan(){
   var t=todayISO();
   var sel=isDate(state.ui.sel)?state.ui.sel:t;
@@ -1772,9 +1780,9 @@ function renderPlan(){
 
   var dateNav='<div class="hero-date">'+
     '<button class="daynav" data-act="day-shift" data-n="-1" aria-label="하루 전">‹</button>'+
-    '<span class="hero-date-text">'+mdLong(sel)+' <em>'+dowOf(sel)+'</em></span>'+
+    '<span class="hero-date-text">'+mdLong(sel)+' <em>'+dowOf(sel)+'</em>'+(isToday?'':'<small class="rel-day">'+relDayText(t,sel)+'</small>')+'</span>'+
     '<button class="daynav" data-act="day-shift" data-n="1" aria-label="하루 뒤">›</button>'+
-    (isToday?'':'<button class="today-chip" data-act="go-today">오늘</button>')+
+    (isToday?'':'<button class="today-chip" data-act="go-today" aria-label="오늘 날짜로 돌아가기">↩ 오늘로</button>')+
   '</div>';
 
   var badge;
